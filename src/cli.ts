@@ -58,7 +58,7 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
   if (files.length === 0) { console.error('no matching files'); process.exit(2); }
 
   const config = flags.attr ? { attributeName: flags.attr as string } : undefined;
-  const result = await runPipeline(adapter, transport, files, config);
+  const result = await runPipeline(adapter, transport, files, config, { regenerate: !!flags.regenerate });
 
   for (const t of result.tagged) {
     if (flags.dry) { console.log(`--- ${t.file} (dry) ---\n${t.after}\n`); }

@@ -17,9 +17,12 @@ export async function runPipeline(
   transport: TestIdTransport,
   files: { file: string; component: string; source: string }[],
   config?: Partial<CoreConfig>,
+  opts?: { regenerate?: boolean },
 ): Promise<{ tagged: TaggedFile[]; version: number; overrides: string[]; warnings: Warning[] }> {
   // 1. Parse every file into the shared IR (the only framework-aware step).
-  const nodes = files.flatMap((f) => adapter.parse(f.source, f.file, f.component));
+  const parsed = files.flatMap((f) => adapter.parse(f.source, f.file, f.component));
+  // regenerate: drop existing ids so every element is freshly minted (and overwritten).
+  const nodes = opts?.regenerate ? parsed.map((n) => ({ ...n, existingId: null })) : parsed;
 
   // 2. Ask the transport to assign ids + persist a registry version.
   const mergedConfig = {
