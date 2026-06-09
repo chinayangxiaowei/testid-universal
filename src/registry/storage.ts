@@ -29,7 +29,15 @@ export interface RegistryEntry {
 export interface RegistrySnapshot {
   version: number;
   generated_at: string;
+  /** Ids present in this version. The active set diff and locators read from. */
   entries: Record<string, RegistryEntry>;
+  /**
+   * Provenance of ids that existed before but are NOT present in this version
+   * (tombstones). Kept so that first_seen, manual source, and regeneration
+   * history survive an id disappearing and later coming back. A retired entry's
+   * last_seen_version marks the version it was last present in.
+   */
+  retired?: Record<string, RegistryEntry>;
 }
 
 export interface RegistryStorage {

@@ -15,6 +15,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "demo": "ts-node examples/demo.ts",
     "cli": "ts-node src/cli.ts",
     "serve": "ts-node src/server/http.ts"
@@ -22,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.8"
   }
 }

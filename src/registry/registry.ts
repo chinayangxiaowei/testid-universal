@@ -27,12 +27,16 @@ export async function reconcile(
 ): Promise<ReconcileResult> {
   const prev = await storage.loadLatest();
   const prevEntries = prev?.entries ?? {};
+  const prevRetired = prev?.retired ?? {};
   const version = (prev?.version ?? 0) + 1;
   const overrides: string[] = [];
+  const draftIds = new Set(drafts.map((d) => d.id));
 
   const entries: Record<string, RegistryEntry> = {};
   for (const d of drafts) {
-    const existing = prevEntries[d.id];
+    // Provenance survives a disappearance: an id absent for some versions still
+    // lives in `retired`, so look there too before treating it as brand new.
+    const existing = prevEntries[d.id] ?? prevRetired[d.id];
     const everSeen = existing != null;
     const wasPresentLast = existing?.last_seen_version === prev?.version;
 
@@ -40,7 +44,9 @@ export async function reconcile(
     const source: RegistryEntry['source'] = existing?.source === 'manual' ? 'manual' : 'generated';
     if (existing?.source === 'manual') overrides.push(d.id);
 
-    // generation_history records every version in which the id was (re)created.
+    // generation_history records every version in which the id was (re)created. A
+    // regenerated id (seen before but not present in the previous version) gets the
+    // current version appended.
     let history = existing?.generation_history ?? [];
     if (!everSeen || !wasPresentLast) history = [...history, version]; // first time or regenerated
 
@@ -58,7 +64,15 @@ export async function reconcile(
     };
   }
 
-  const snapshot: RegistrySnapshot = { version, generated_at: now, entries };
+  // Carry forward tombstones for ids no longer present, preserving their last-seen
+  // state untouched (last_seen_version stays at the version they last appeared in).
+  // This is what lets a later comeback be recognized as a regeneration.
+  const retired: Record<string, RegistryEntry> = {};
+  for (const [id, e] of [...Object.entries(prevEntries), ...Object.entries(prevRetired)]) {
+    if (!draftIds.has(id)) retired[id] = e;
+  }
+
+  const snapshot: RegistrySnapshot = { version, generated_at: now, entries, retired };
   await storage.save(snapshot);
   return { snapshot, overrides };
 }
