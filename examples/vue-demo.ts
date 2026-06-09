@@ -16,7 +16,7 @@ const LOGIN_V1 = `<template>
   <v-form>
     <v-text-field v-model="email" type="email" placeholder="you@example.com" />
     <v-text-field v-model="password" type="password" />
-    <v-btn type="submit">Sign in</v-btn>
+    <v-btn type="submit" @click="login">Sign in</v-btn>
     <router-link to="/forgot">Forgot password?</router-link>
   </v-form>
 </template>
@@ -25,6 +25,7 @@ const LOGIN_V1 = `<template>
 import { ref } from 'vue';
 const email = ref('');
 const password = ref('');
+function login() {}
 </script>
 `;
 
@@ -32,7 +33,7 @@ const LOGIN_V2 = `<template>
   <v-form>
     <v-text-field v-model="email" type="email" placeholder="you@example.com" />
     <v-text-field v-model="password" type="password" aria-label="Password" />
-    <v-btn type="submit">Login</v-btn>
+    <v-btn type="submit" @click="login">Login</v-btn>
     <router-link to="/forgot">Forgot password?</router-link>
   </v-form>
 </template>
@@ -41,6 +42,7 @@ const LOGIN_V2 = `<template>
 import { ref } from 'vue';
 const email = ref('');
 const password = ref('');
+function login() {}
 </script>
 `;
 
