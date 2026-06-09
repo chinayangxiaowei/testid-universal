@@ -3,14 +3,14 @@
  *
  * Unlike the regex-based HtmlTemplateAdapter, this parses the SFC with the official
  * @vue/compiler-sfc, walks the real template AST, and normalizes Vue's vocabulary
- * (v-model, :to / router-link, native attrs, text) into canonical SemanticHints.
+ * (v-model, :to / router-link, native attrs, text) into canonical RawSignals.
  * Everything downstream — ids, registry, diff, locators — is untouched: the adapter
  * is the ONLY framework-aware seam.
  *
  * @vue/compiler-sfc is an OPTIONAL peer dependency. It is lazily required so that
  * consumers who never touch Vue keep the package's zero-runtime-dependency profile.
  */
-import { ElementNode, SemanticHints } from '../core/types';
+import { ElementNode, RawSignals } from '../core/types';
 import { FrameworkAdapter, applyTestIdEdits } from './contract';
 import { Edit } from '../server/service';
 
@@ -55,16 +55,23 @@ export const VUETIFY_TAG_MAP: Record<string, { short: string; long: string }> = 
 function readProps(node: VueNode) {
   const attrs: Record<string, string> = {};
   const bound: Record<string, string> = {};
+  const events: Record<string, string> = {};
   let model: string | null = null;
   for (const p of node.props ?? []) {
-    if (p.type === PROP_ATTRIBUTE) {
-      attrs[p.name] = p.value?.content ?? '';
-    } else if (p.type === PROP_DIRECTIVE) {
+    if (p.type === PROP_ATTRIBUTE) attrs[p.name] = p.value?.content ?? '';
+    else if (p.type === PROP_DIRECTIVE) {
       if (p.name === 'model') model = p.exp?.content ?? null;
       else if (p.name === 'bind' && p.arg?.content) bound[p.arg.content] = p.exp?.content ?? '';
+      else if (p.name === 'on' && p.arg?.content) events[p.arg.content] = handlerName(p.exp?.content ?? '');
     }
   }
-  return { attrs, bound, model };
+  return { attrs, bound, events, model };
+}
+
+/** Reduce a handler expression to a function name: "login" / "save()" -> "login"/"save". */
+function handlerName(expr: string): string {
+  const m = /^\s*([A-Za-z_$][\w$]*)\s*\(?/.exec(expr);
+  return m ? m[1] : expr.trim();
 }
 
 function directText(node: VueNode): string | null {
@@ -76,8 +83,8 @@ function directText(node: VueNode): string | null {
   return text || null;
 }
 
-function normalize(node: VueNode): Partial<SemanticHints> {
-  const { attrs, bound, model } = readProps(node);
+function normalize(node: VueNode): RawSignals {
+  const { attrs, bound, events, model } = readProps(node);
   const pick = (...keys: string[]) => {
     for (const k of keys) {
       if (attrs[k] != null && attrs[k] !== '') return attrs[k];
@@ -85,17 +92,22 @@ function normalize(node: VueNode): Partial<SemanticHints> {
     }
     return null;
   };
-  const semantic: Partial<SemanticHints> = {
-    field_name: model ?? pick('name'),
+  const signals: RawSignals = {
+    explicit_key: pick('data-tid'),
+    form_control: model ?? pick('name'),
     name: pick('name'),
+    route: pick('to', 'href'),
+    event_handlers: events,
+    bound_identifiers: bound,
+    html_id: pick('id'),
     aria_label: pick('aria-label'),
     placeholder: pick('placeholder'),
-    route: pick('to', 'href'),
     type: pick('type'),
+    role: pick('role'),
   };
   const text = directText(node);
-  if (text) semantic.text_content = text;
-  return semantic;
+  if (text) signals.text = text;
+  return signals;
 }
 
 export class VueAdapter implements FrameworkAdapter {
@@ -120,7 +132,7 @@ export class VueAdapter implements FrameworkAdapter {
         nodes.push({
           component,
           tag: node.tag,
-          semantic: normalize(node),
+          signals: normalize(node),
           existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
           loc: { file, start, end: tagEnd },
         });
