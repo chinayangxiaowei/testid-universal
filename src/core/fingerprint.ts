@@ -1,39 +1,44 @@
 /**
- * Fingerprint — the deterministic signature of "what this element IS".
+ * Fingerprint — the rich descriptive signature of "what this element is".
  *
- * The id answers "what is it called"; the fingerprint answers "what is it".
- * Decoupling the two is what lets the diff engine tell a *rename* (same element,
- * new name) from an *add+remove*, and a *modification* (same name, changed nature)
- * apart. The fingerprint is built in a fixed canonical order so it is stable
- * regardless of authoring order, across runs and across machines.
+ * Built from ALL signals (including display copy and static_attributes) in a
+ * fixed canonical order, so reordering attributes never changes it. Used only
+ * to detect `modified` and to report which fields changed — NEVER for matching.
+ * Matching is by `identity` (see identity.ts), which excludes copy.
  */
-import { createHash } from 'node:crypto';
-import { ElementNode, SemanticHints, CoreConfig } from './types';
+import { NormalizedSignals } from './types';
 
-// Fixed order — NOT the key-priority order. Order here only affects the string form,
-// and must never change casually or every fingerprint in existing registries shifts.
-const FINGERPRINT_ORDER: (keyof SemanticHints)[] = [
-  'type', 'field_name', 'name', 'aria_label', 'placeholder', 'route', 'role', 'text_content',
-];
-
-export function fingerprintOf(node: ElementNode): string {
-  const parts: string[] = [node.tag];
-  for (const field of FINGERPRINT_ORDER) {
-    const v = node.semantic[field];
-    if (v != null && String(v).trim() !== '') parts.push(`${field}=${String(v).trim()}`);
-  }
-  if (node.extraAttrs) {
-    for (const k of Object.keys(node.extraAttrs).sort()) {
-      const v = node.extraAttrs[k];
-      if (v != null && String(v).trim() !== '') parts.push(`${k}=${String(v).trim()}`);
-    }
-  }
-  return parts.join('|');
+function pushScalar(parts: string[], key: string, v: string | null) {
+  if (v != null && v.length > 0) parts.push(`${key}=${v}`);
+}
+function pushMap(parts: string[], key: string, m: Record<string, string>) {
+  for (const k of Object.keys(m).sort()) parts.push(`${key}.${k}=${m[k]}`);
+}
+function pushList(parts: string[], key: string, arr: string[]) {
+  if (arr.length) parts.push(`${key}=${arr.join(',')}`);
 }
 
-export function hashOf(fingerprint: string, config: CoreConfig): string {
-  return createHash(config.hashAlgorithm)
-    .update(fingerprint)
-    .digest('hex')
-    .slice(0, Math.max(4, Math.min(16, config.hashLength)));
+export function fingerprintOf(tag: string, sig: NormalizedSignals): string {
+  const parts: string[] = [tag.toLowerCase()];
+  pushScalar(parts, 'explicit_key', sig.explicit_key);
+  pushScalar(parts, 'form_control', sig.form_control);
+  pushScalar(parts, 'name', sig.name);
+  pushScalar(parts, 'route', sig.route);
+  pushMap(parts, 'on', sig.event_handlers);
+  pushMap(parts, 'bound', sig.bound_identifiers);
+  pushScalar(parts, 'html_id', sig.html_id);
+  pushMap(parts, 'struct', sig.structural);
+  pushList(parts, 'child_shape', sig.child_shape);
+  pushMap(parts, 'ctx', sig.context);
+  pushList(parts, 'class', sig.semantic_css);
+  pushScalar(parts, 'text', sig.text);
+  pushScalar(parts, 'aria_label', sig.aria_label);
+  pushScalar(parts, 'placeholder', sig.placeholder);
+  pushScalar(parts, 'title', sig.title);
+  pushScalar(parts, 'alt', sig.alt);
+  pushScalar(parts, 'value', sig.value);
+  pushScalar(parts, 'type', sig.type);
+  pushScalar(parts, 'role', sig.role);
+  pushMap(parts, 'attr', sig.static_attributes);
+  return parts.join('|');
 }

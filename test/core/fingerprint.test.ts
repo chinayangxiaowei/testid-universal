@@ -1,59 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { fingerprintOf, hashOf } from '../../src/core/fingerprint';
-import { DEFAULT_CONFIG } from '../../src/core/types';
-import { node } from '../helpers';
+import { fingerprintOf } from '../../src/core/fingerprint';
+import { normalizeSignals } from '../../src/core/signals';
+
+const fp = (tag: string, raw: Parameters<typeof normalizeSignals>[0]) =>
+  fingerprintOf(tag, normalizeSignals(raw));
 
 describe('fingerprintOf', () => {
-  it('is deterministic for identical input', () => {
-    const a = node({ tag: 'input', semantic: { field_name: 'email', type: 'email' } });
-    const b = node({ tag: 'input', semantic: { field_name: 'email', type: 'email' } });
-    expect(fingerprintOf(a)).toBe(fingerprintOf(b));
+  it('is deterministic and independent of authoring order', () => {
+    const a = fp('input', { form_control: 'email', type: 'email', text: 'Email' });
+    const b = fp('input', { text: 'Email', type: 'email', form_control: 'email' });
+    expect(a).toBe(b);
   });
 
-  it('is independent of the authoring order of semantic hints', () => {
-    // FINGERPRINT_ORDER is fixed, so insertion order must not change the signature.
-    const a = node({ tag: 'input', semantic: { type: 'email', field_name: 'email', placeholder: 'you@x' } });
-    const b = node({ tag: 'input', semantic: { placeholder: 'you@x', field_name: 'email', type: 'email' } });
-    expect(fingerprintOf(a)).toBe(fingerprintOf(b));
+  it('starts with the tag', () => {
+    expect(fp('button', { text: 'Go' })).toMatch(/^button\|/);
   });
 
-  it('changes when a semantic hint changes (drives "modified" detection)', () => {
-    const before = node({ tag: 'input', semantic: { field_name: 'password', type: 'password' } });
-    const after = node({ tag: 'input', semantic: { field_name: 'password', type: 'password', aria_label: 'Password' } });
-    expect(fingerprintOf(before)).not.toBe(fingerprintOf(after));
+  it('includes display copy (so a copy edit changes the fingerprint)', () => {
+    expect(fp('button', { event_handlers: { click: 'go' }, text: 'Sign in' }))
+      .not.toBe(fp('button', { event_handlers: { click: 'go' }, text: 'Login' }));
   });
 
-  it('ignores empty / whitespace-only hint values', () => {
-    const withEmpty = node({ tag: 'input', semantic: { field_name: 'email', placeholder: '   ', name: '' } });
-    const without = node({ tag: 'input', semantic: { field_name: 'email' } });
-    expect(fingerprintOf(withEmpty)).toBe(fingerprintOf(without));
+  it('folds maps in sorted-key order', () => {
+    const a = fp('div', { event_handlers: { b: 'B', a: 'A' } });
+    const b = fp('div', { event_handlers: { a: 'A', b: 'B' } });
+    expect(a).toBe(b);
   });
 
-  it('folds extraAttrs in a stable (sorted) order', () => {
-    const a = node({ tag: 'div', semantic: { name: 'x' }, extraAttrs: { b: '2', a: '1' } });
-    const b = node({ tag: 'div', semantic: { name: 'x' }, extraAttrs: { a: '1', b: '2' } });
-    expect(fingerprintOf(a)).toBe(fingerprintOf(b));
-  });
-
-  it('starts the signature with the tag name', () => {
-    expect(fingerprintOf(node({ tag: 'button', semantic: { text_content: 'Go' } }))).toMatch(/^button\|/);
-  });
-});
-
-describe('hashOf', () => {
-  it('is deterministic', () => {
-    const fp = 'input|type=email|field_name=email';
-    expect(hashOf(fp, DEFAULT_CONFIG)).toBe(hashOf(fp, DEFAULT_CONFIG));
-  });
-
-  it('honors hashLength clamped to [4, 16]', () => {
-    const fp = 'whatever';
-    expect(hashOf(fp, { ...DEFAULT_CONFIG, hashLength: 6 })).toHaveLength(6);
-    expect(hashOf(fp, { ...DEFAULT_CONFIG, hashLength: 1 })).toHaveLength(4); // clamped up
-    expect(hashOf(fp, { ...DEFAULT_CONFIG, hashLength: 99 })).toHaveLength(16); // clamped down
-  });
-
-  it('produces different hashes for different fingerprints', () => {
-    expect(hashOf('a', DEFAULT_CONFIG)).not.toBe(hashOf('b', DEFAULT_CONFIG));
+  it('includes static_attributes (fingerprint-only catch-all)', () => {
+    expect(fp('p-button', { static_attributes: { severity: 'danger' } }))
+      .not.toBe(fp('p-button', { static_attributes: { severity: 'info' } }));
   });
 });
