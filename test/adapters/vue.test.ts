@@ -71,3 +71,29 @@ describe('VUETIFY_TAG_MAP', () => {
     expect(VUETIFY_TAG_MAP['v-btn'].short).toBe('button');
   });
 });
+
+describe('VueAdapter.parse loop detection', () => {
+  const SFC = `<template>
+  <ul>
+    <li v-for="x in items" :key="x.id">
+      <button @click="pick(x)">Pick</button>
+    </li>
+  </ul>
+</template>
+
+<script setup>
+function pick(x) { void x; }
+</script>
+`;
+  const nodes = new VueAdapter().parse(SFC, 'List.vue', 'list');
+  const by = (t: string) => nodes.find((n) => n.tag === t)!;
+
+  it('marks the v-for element and its descendants as inLoop', () => {
+    expect(by('li').inLoop).toBe(true);
+    expect(by('button').inLoop).toBe(true);
+  });
+
+  it('leaves elements outside the loop unmarked', () => {
+    expect(by('ul').inLoop ?? false).toBe(false);
+  });
+});

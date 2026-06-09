@@ -123,11 +123,12 @@ export class VueAdapter implements FrameworkAdapter {
     if (!root) return [];
 
     const nodes: ElementNode[] = [];
-    const visit = (node: VueNode) => {
+    const visit = (node: VueNode, inLoop: boolean) => {
+      const hasFor = (node.props ?? []).some((p) => p.type === PROP_DIRECTIVE && p.name === 'for');
+      const loop = inLoop || hasFor;
       if (node.type === NODE_ELEMENT && node.tag) {
         const attrs = readProps(node).attrs;
         const start = node.loc.start.offset;
-        // Opening tag ends at the first '>' from the start (matches the write contract).
         const tagEnd = source.indexOf('>', start);
         nodes.push({
           component,
@@ -135,11 +136,12 @@ export class VueAdapter implements FrameworkAdapter {
           signals: normalize(node),
           existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
           loc: { file, start, end: tagEnd },
+          inLoop: loop,
         });
       }
-      for (const child of node.children ?? []) visit(child);
+      for (const child of node.children ?? []) visit(child, loop);
     };
-    visit(root);
+    visit(root, false);
     return nodes;
   }
 
