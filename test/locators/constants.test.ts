@@ -3,6 +3,14 @@ import { generateConstants, constNameForId } from '../../src/locators';
 import { snapshot, entry } from '../helpers';
 
 describe('generateConstants', () => {
+  it('throws when two distinct ids map to the same constant name', () => {
+    const snap = snapshot(1, {
+      'a__my-widget--x': entry({ fingerprint: 'F', identity: 'a::my-widget::x' }),
+      'a__my--widget-x': entry({ fingerprint: 'G', identity: 'a::my::widget-x' }),
+    });
+    expect(() => generateConstants(snap)).toThrow(/collide/);
+  });
+
   it('emits a frozen testIds map of camelName -> id, sorted', () => {
     const snap = snapshot(1, {
       'login__button--login': entry({ fingerprint: 'F', identity: 'login::button::login' }),

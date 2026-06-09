@@ -14,6 +14,17 @@ const diff: DiffResult = {
 const map = { a__changed: ['spec/x.spec.ts'], a__gone: ['spec/y.spec.ts'] };
 
 describe('affectedTests', () => {
+  it('routes a regenerated id to re-test', () => {
+    const d = {
+      from_version: 1, to_version: 2,
+      summary: { unchanged: 0, added: 0, removed: 0, modified: 0, regenerated: 1 },
+      added: [], removed: [], modified: [],
+      regenerated: [{ id: 'a__reborn', identity: 'a::x::reborn', component: 'a' }],
+    } as const;
+    const aff = affectedTests(d as any, { a__reborn: ['spec/r.spec.ts'] });
+    expect(aff.find((a) => a.id === 'a__reborn')).toMatchObject({ action: 're-test', tests: ['spec/r.spec.ts'] });
+  });
+
   it('routes each diff change to its action and referencing tests', () => {
     const aff = affectedTests(diff, map);
     expect(aff.find((a) => a.id === 'a__changed')).toMatchObject({ action: 're-test', tests: ['spec/x.spec.ts'] });

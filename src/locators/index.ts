@@ -117,7 +117,19 @@ export function constNameForId(id: string): string {
  */
 export function generateConstants(snapshot: RegistrySnapshot): string {
   const lines = ['// Auto-generated testid constants. Do not edit by hand.', '', 'export const testIds = {'];
-  for (const id of sortedIds(snapshot)) lines.push(`  ${camelName(id)}: '${id}',`);
+  const seen = new Map<string, string>();
+  for (const id of sortedIds(snapshot)) {
+    const name = camelName(id);
+    const prior = seen.get(name);
+    if (prior) {
+      throw new Error(
+        `testId constant name "${name}" collides for ids "${prior}" and "${id}"; ` +
+        `give one element an explicit key (data-tid) to disambiguate.`,
+      );
+    }
+    seen.set(name, id);
+    lines.push(`  ${name}: '${id}',`);
+  }
   lines.push('} as const;', '');
   return lines.join('\n');
 }

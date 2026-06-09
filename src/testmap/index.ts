@@ -34,6 +34,7 @@ export function affectedTests(diff: DiffResult, testMap: Record<string, string[]
   for (const a of diff.added) out.push({ id: a.id, action: 'write-new', tests: testMap[a.id] ?? [] });
   for (const r of diff.removed) out.push({ id: r.id, action: 'retire', tests: testMap[r.id] ?? [] });
   for (const m of diff.modified) out.push({ id: m.id, action: 're-test', tests: testMap[m.id] ?? [] });
+  for (const r of diff.regenerated) out.push({ id: r.id, action: 're-test', tests: testMap[r.id] ?? [] });
   out.sort((x, y) => x.id.localeCompare(y.id));
   return out;
 }
