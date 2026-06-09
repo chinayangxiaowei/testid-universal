@@ -9,7 +9,7 @@
  * Swap the storage for Postgres/Redis and this same service becomes a multi-repo,
  * multi-team testid authority.
  */
-import { ElementNode, EntryDraft, CoreConfig, DEFAULT_CONFIG, generate } from '../core';
+import { ElementNode, CoreConfig, DEFAULT_CONFIG, generate, Warning } from '../core';
 import { RegistryStorage, RegistrySnapshot, reconcile, diff, DiffResult, generateLocatorsSafe } from './_reexport';
 
 export interface TagRequest {
@@ -24,6 +24,7 @@ export interface TagResponse {
   assignments: { fingerprint: string; id: string; component: string }[];
   edits: Edit[];          // what the adapter should write back into the source
   overrides: string[];    // manual ids that shadowed generated ones
+  warnings: Warning[];
 }
 
 export class TestIdService {
@@ -36,7 +37,7 @@ export class TestIdService {
   /** The main entry point: accept IR, assign ids, persist a new registry version, return edits. */
   async tag(req: TagRequest): Promise<TagResponse> {
     const config = this.merge(req.config);
-    const drafts: EntryDraft[] = generate(req.nodes, config);
+    const { drafts, warnings } = generate(req.nodes, config);
     const { snapshot, overrides } = await reconcile(drafts, this.storage);
 
     const edits: Edit[] = drafts
@@ -48,6 +49,7 @@ export class TestIdService {
       assignments: drafts.map((d) => ({ fingerprint: d.fingerprint, id: d.id, component: d.component })),
       edits,
       overrides,
+      warnings,
     };
   }
 
@@ -59,7 +61,7 @@ export class TestIdService {
     const a = await this.storage.loadVersion(fromVersion);
     const b = await this.storage.loadVersion(toVersion);
     if (!a || !b) return null;
-    return diff(a, b, threshold);
+    return diff(a, b);
   }
 
   async locators(target: 'robot' | 'playwright' | 'cypress', attributeName?: string): Promise<Record<string, string> | null> {
