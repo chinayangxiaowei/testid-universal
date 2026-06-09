@@ -14,11 +14,6 @@ export interface ReconcileResult {
   overrides: string[]; // ids where a manual entry shadowed a generated one
 }
 
-function toSemanticRecord(semantic: EntryDraft['semantic']): Record<string, string | null> {
-  const out: Record<string, string | null> = {};
-  for (const [k, v] of Object.entries(semantic)) out[k] = v == null ? null : String(v);
-  return out;
-}
 
 export async function reconcile(
   drafts: EntryDraft[],
@@ -54,8 +49,9 @@ export async function reconcile(
       component: d.component,
       tag: d.tag,
       element_type: d.element_type,
+      identity: d.identity,
       fingerprint: d.fingerprint,
-      semantic: toSemanticRecord(d.semantic),
+      signals: d.signals,
       source,
       first_seen_version: existing?.first_seen_version ?? version,
       last_seen_version: version,

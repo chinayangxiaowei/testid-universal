@@ -1,5 +1,6 @@
 import { ElementNode } from '../src/core/types';
 import { RegistryEntry, RegistrySnapshot } from '../src/registry/storage';
+import { normalizeSignals } from '../src/core/signals';
 
 /** Build an ElementNode with sensible defaults; override what a test cares about. */
 export function node(partial: Partial<ElementNode> & { tag: string }): ElementNode {
@@ -12,7 +13,8 @@ export function entry(partial: Partial<RegistryEntry> & { fingerprint: string })
     component: 'login',
     tag: 'input',
     element_type: 'native_input_text',
-    semantic: {},
+    identity: 'login::input::x',
+    signals: normalizeSignals({}),
     source: 'generated',
     first_seen_version: 1,
     last_seen_version: 1,

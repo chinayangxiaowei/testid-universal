@@ -6,11 +6,11 @@ import { generate } from '../../src/core/engine';
 import { DEFAULT_CONFIG } from '../../src/core/types';
 import { node, snapshot, entry } from '../helpers';
 
-const button = () => node({ tag: 'button', semantic: { text_content: 'x' } });
+const button = () => node({ tag: 'button', signals: { event_handlers: { click: 'go' }, text: 'x' } });
 
 const NOW = '2026-06-09T00:00:00.000Z';
-const draftsFor = (...nodes: ReturnType<typeof node>[]) => generate(nodes, DEFAULT_CONFIG);
-const emailInput = () => node({ tag: 'input', semantic: { field_name: 'email', type: 'email' } });
+const draftsFor = (...nodes: ReturnType<typeof node>[]) => generate(nodes, DEFAULT_CONFIG).drafts;
+const emailInput = () => node({ tag: 'input', signals: { form_control: 'email', type: 'email' } });
 
 describe('reconcile', () => {
   it('stamps first/last-seen and history on first appearance', async () => {

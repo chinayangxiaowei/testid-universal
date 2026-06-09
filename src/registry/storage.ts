@@ -12,13 +12,15 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { NormalizedSignals } from '../core/types';
 
 export interface RegistryEntry {
   component: string;
   tag: string;
   element_type: string;
+  identity: string;
   fingerprint: string;
-  semantic: Record<string, string | null>;
+  signals: NormalizedSignals;
   source: 'generated' | 'manual';
   first_seen_version: number;
   last_seen_version: number;
