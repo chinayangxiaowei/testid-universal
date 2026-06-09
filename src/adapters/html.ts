@@ -10,23 +10,25 @@
  * @vue/compiler-sfc / @babel/parser to build the SAME ElementNode[] — see the
  * *.sketch.ts files. The normalization map below is the "vocabulary" seam.
  */
-import { ElementNode, SemanticHints } from '../core/types';
+import { ElementNode, RawSignals } from '../core/types';
 import { FrameworkAdapter, applyTestIdEdits } from './contract';
 import { Edit } from '../server/service';
 
 const VOID_TAGS = new Set(['input', 'img', 'br', 'hr', 'meta', 'link']);
 
-/** Map raw HTML/Angular/Vue attributes onto canonical semantic hints. */
-function normalize(tag: string, attrs: Record<string, string>): Partial<SemanticHints> {
+/** Map raw HTML/Angular/Vue attributes onto the closed RawSignals contract. */
+function normalize(attrs: Record<string, string>): RawSignals {
   const get = (...names: string[]) => { for (const n of names) if (attrs[n] != null) return attrs[n]; return null; };
   return {
-    field_name: get('formcontrolname', 'name', 'v-model', '[(ngmodel)]'),
+    explicit_key: get('data-tid'),
+    form_control: get('formcontrolname', 'name'),
     name: get('name'),
-    aria_label: get('aria-label', 'arialabel'),
-    placeholder: get('placeholder'),
     route: get('routerlink', 'to', 'href'),
-    role: get('role'),
+    html_id: get('id'),
+    aria_label: get('aria-label'),
+    placeholder: get('placeholder'),
     type: get('type'),
+    role: get('role'),
   };
 }
 
@@ -55,13 +57,12 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
         }
       }
 
-      const semantic = normalize(tag, attrs);
-      if (text) semantic.text_content = text;
+      const signals = normalize(attrs);
+      if (text) signals.text = text;
 
-      // end offset = index of the closing '>' so write() can rewrite the whole opening tag.
       const tagEnd = m.index + m[0].length - 1;
       nodes.push({
-        component, tag, semantic,
+        component, tag, signals,
         existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
         loc: { file, start: m.index, end: tagEnd },
       });
