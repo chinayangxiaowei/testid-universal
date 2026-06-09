@@ -82,6 +82,13 @@ describe('reconcile', () => {
     expect(s3.entries['login__input--email'].source).toBe('manual');
   });
 
+  it('records source "sticky" for a draft taken from an existing id', async () => {
+    const storage = new InMemoryStorage();
+    const stickyNode = () => node({ tag: 'input', signals: { form_control: 'email' }, existingId: 'login__input--email' });
+    const { snapshot: s } = await reconcile(draftsFor(stickyNode()), storage, NOW);
+    expect(s.entries['login__input--email'].source).toBe('sticky');
+  });
+
   it('makes diff report a comeback as regenerated, not added', async () => {
     const storage = new InMemoryStorage();
     await reconcile(draftsFor(emailInput(), button()), storage, NOW); // v1: both

@@ -36,8 +36,13 @@ export async function reconcile(
     const wasPresentLast = existing?.last_seen_version === prev?.version;
 
     // Manual entries (someone hand-wrote this id) are preserved as 'manual'.
-    const source: RegistryEntry['source'] = existing?.source === 'manual' ? 'manual' : 'generated';
-    if (existing?.source === 'manual') overrides.push(d.id);
+    let source: RegistryEntry['source'];
+    if (existing?.source === 'manual') {
+      source = 'manual';
+      overrides.push(d.id);
+    } else {
+      source = d.sticky ? 'sticky' : 'generated';
+    }
 
     // generation_history records every version in which the id was (re)created. A
     // regenerated id (seen before but not present in the previous version) gets the
