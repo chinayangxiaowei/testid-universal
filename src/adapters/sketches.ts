@@ -32,28 +32,10 @@ export function angularParseSketch(source: string, file: string, component: stri
 }
 
 /* ------------------------------------------------------------------- Vue ---
- * Use @vue/compiler-sfc to get the <template> block, then @vue/compiler-dom's
- * baseParse for its AST. v-model maps onto field_name; :to / router-link onto route.
+ * IMPLEMENTED. The Vue sketch has graduated into a real adapter backed by
+ * @vue/compiler-sfc — see `src/adapters/vue.ts` (VueAdapter + VUETIFY_TAG_MAP).
+ * The remaining sketches stay illustrative until they are likewise built.
  */
-export function vueParseSketch(source: string, file: string, component: string): ElementNode[] {
-  // import { parse } from '@vue/compiler-sfc';
-  // const tpl = parse(source).descriptor.template?.content ?? '';
-  // import { baseParse } from '@vue/compiler-dom'; const ast = baseParse(tpl);
-  const els: any[] = [];
-  return els.map((el) => ({
-    component, tag: el.tag,
-    semantic: {
-      field_name: prop(el, 'v-model') ?? prop(el, 'name'),
-      aria_label: prop(el, 'aria-label'),
-      placeholder: prop(el, 'placeholder'),
-      route: prop(el, 'to') ?? prop(el, 'href'),
-      type: prop(el, 'type'),
-      text_content: directText(el),
-    } as Partial<SemanticHints>,
-    loc: { file, start: el.loc.start.offset, end: el.loc.start.offset + el.tag.length + 1 },
-    existingId: prop(el, 'data-testid'),
-  }));
-}
 
 /* ----------------------------------------------------------------- React ---
  * The hard case: source is JSX, not a DOM. Use @babel/parser + @babel/traverse,

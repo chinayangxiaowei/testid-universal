@@ -18,13 +18,23 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "ts-node examples/demo.ts",
+    "demo:vue": "ts-node examples/vue-demo.ts",
     "cli": "ts-node src/cli.ts",
     "serve": "ts-node src/server/http.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@vue/compiler-sfc": "^3.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0",
     "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "@vue/compiler-sfc": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vue/compiler-sfc": {
+      "optional": true
+    }
   }
 }

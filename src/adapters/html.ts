@@ -11,7 +11,7 @@
  * *.sketch.ts files. The normalization map below is the "vocabulary" seam.
  */
 import { ElementNode, SemanticHints } from '../core/types';
-import { FrameworkAdapter } from './contract';
+import { FrameworkAdapter, applyTestIdEdits } from './contract';
 import { Edit } from '../server/service';
 
 const VOID_TAGS = new Set(['input', 'img', 'br', 'hr', 'meta', 'link']);
@@ -70,22 +70,8 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
   }
 
   write(source: string, edits: Edit[]): string {
-    // Idempotent: for each tagged element, rewrite its opening tag — strip any
-    // existing data-testid/data-cy first, then add the assigned one. Re-running on
-    // an already-tagged file produces identical output (no duplicate attributes).
-    const ordered = [...edits].sort((a, b) => b.loc.start - a.loc.start);
-    let out = source;
-    for (const e of ordered) {
-      const openTag = out.slice(e.loc.start, e.loc.end + 1);
-      const selfClose = /\/>\s*$/.test(openTag);
-      const inner = openTag
-        .replace(/\/?>\s*$/, '')                                   // drop the closing '>' or '/>'
-        .replace(/\s+(data-testid|data-cy)\s*=\s*"[^"]*"/g, '')     // drop existing test ids
-        .replace(/\s+$/, '');
-      const rebuilt = `${inner} ${e.attributeName}="${e.id}"${selfClose ? ' />' : '>'}`;
-      out = out.slice(0, e.loc.start) + rebuilt + out.slice(e.loc.end + 1);
-    }
-    return out;
+    // Idempotent opening-tag rewrite, shared with the Vue adapter.
+    return applyTestIdEdits(source, edits);
   }
 }
 
