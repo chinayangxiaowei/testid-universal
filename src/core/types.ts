@@ -8,27 +8,64 @@
  */
 
 /**
- * Canonical, framework-neutral semantic hints.
- *
- * Each framework has its own vocabulary (Angular `formControlName`, React `name`,
- * Vue `v-model`, RouterLink vs `to`, …). The ADAPTER maps those into these
- * canonical keys; the CORE only ever reasons about the canonical names. This is
- * the single most important seam: vocabulary = adapter, policy = core.
+ * The closed signal contract every adapter fills. Tiered by stability:
+ * Tier 0 explicit anchor, Tier 1 code-wired, Tier 2 structural, Tier 3 copy.
+ * Identity is derived only from stable slots; `static_attributes` feeds the
+ * fingerprint only and never influences identity.
  */
-export interface SemanticHints {
-  field_name: string | null;    // form control identity (Angular formControlName, React/HTML name, Vue v-model target)
-  name: string | null;          // generic name attribute
-  aria_label: string | null;    // accessibility label
-  placeholder: string | null;   // input placeholder
-  text_content: string | null;  // direct visible text
-  route: string | null;         // routerLink / <Link to> / <router-link to>
-  role: string | null;          // ARIA role
-  type: string | null;          // input type, button type, etc.
+export interface RawSignals {
+  explicit_key?: string | null;
+  form_control?: string | null;
+  name?: string | null;
+  route?: string | null;
+  event_handlers?: Record<string, string>;
+  bound_identifiers?: Record<string, string>;
+  html_id?: string | null;
+  structural?: Record<string, string>;
+  child_shape?: string[];
+  context?: Record<string, string>;
+  semantic_css?: string[];
+  text?: string | null;
+  aria_label?: string | null;
+  placeholder?: string | null;
+  title?: string | null;
+  alt?: string | null;
+  value?: string | null;
+  type?: string | null;
+  role?: string | null;
+  static_attributes?: Record<string, string>;
 }
 
-export const SEMANTIC_KEYS: (keyof SemanticHints)[] = [
-  'field_name', 'name', 'aria_label', 'placeholder', 'text_content', 'route', 'role', 'type',
-];
+/** RawSignals after normalization: every slot resolved (null / {} / []). */
+export interface NormalizedSignals {
+  explicit_key: string | null;
+  form_control: string | null;
+  name: string | null;
+  route: string | null;
+  event_handlers: Record<string, string>;
+  bound_identifiers: Record<string, string>;
+  html_id: string | null;
+  structural: Record<string, string>;
+  child_shape: string[];
+  context: Record<string, string>;
+  semantic_css: string[];
+  text: string | null;
+  aria_label: string | null;
+  placeholder: string | null;
+  title: string | null;
+  alt: string | null;
+  value: string | null;
+  type: string | null;
+  role: string | null;
+  static_attributes: Record<string, string>;
+}
+
+export interface Warning {
+  code: 'unstable-identity' | 'positional-disambiguator';
+  element_type: string;
+  identity: string;
+  message: string;
+}
 
 /** A source position so an adapter can write the assigned id back. Adapter-defined. */
 export interface SourceLoc {
@@ -41,17 +78,10 @@ export interface SourceLoc {
  * The intermediate representation. One per taggable element, produced by an adapter.
  */
 export interface ElementNode {
-  /** Logical owner of the element, e.g. "login" or a template path. Used for {component}. */
   component: string;
-  /** Tag exactly as authored: "input", "p-dropdown", "MyButton". Used for classification + {tag}. */
   tag: string;
-  /** Canonical semantic hints, already normalized by the adapter. */
-  semantic: Partial<SemanticHints>;
-  /** Optional extra attributes the adapter wants folded into the fingerprint for stability. */
-  extraAttrs?: Record<string, string | null>;
-  /** Position for write-back (optional; runtime adapters can omit it). */
+  signals: RawSignals;
   loc?: SourceLoc;
-  /** If the element already carried a hand-written testid. */
   existingId?: string | null;
 }
 
