@@ -1,0 +1,27 @@
+{
+  "name": "testid-universal",
+  "version": "0.1.0",
+  "description": "Framework-agnostic build-time TestID engine: semantic key -> fingerprint -> deterministic id -> versioned registry -> diff -> locators.",
+  "license": "MIT",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "testid": "dist/src/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "demo": "ts-node examples/demo.ts",
+    "cli": "ts-node src/cli.ts",
+    "serve": "ts-node src/server/http.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

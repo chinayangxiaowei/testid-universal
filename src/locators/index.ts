@@ -1,0 +1,106 @@
+/**
+ * Locator generation — turn a registry snapshot into ready-to-use selectors for
+ * each test stack. Pure, framework-agnostic: it only reads ids + the attribute
+ * name, never the source templates.
+ *
+ * Adding a new test stack = adding one branch here. The selector convention is
+ * always `[<attr>="<id>"]`, so locators stay valid as long as the attribute the
+ * adapter wrote matches the one requested.
+ */
+import { RegistrySnapshot } from '../registry/storage';
+
+export type LocatorTarget = 'robot' | 'playwright' | 'cypress';
+
+const DEFAULT_ATTR = 'data-testid';
+
+/** A SCREAMING_SNAKE identifier safe for variable names. */
+function constName(id: string): string {
+  return id.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase() || 'EL';
+}
+
+/** A camelCase identifier safe for object keys / function names. */
+function camelName(id: string): string {
+  const parts = id.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  if (parts.length === 0) return 'el';
+  return parts
+    .map((p, i) => (i === 0 ? p.toLowerCase() : p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()))
+    .join('');
+}
+
+function sortedIds(snapshot: RegistrySnapshot): string[] {
+  return Object.keys(snapshot.entries).sort();
+}
+
+function robot(snapshot: RegistrySnapshot, attr: string): string {
+  const lines = ['*** Variables ***'];
+  for (const id of sortedIds(snapshot)) {
+    lines.push(`\${${constName(id)}}    css=[${attr}="${id}"]`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+function playwright(snapshot: RegistrySnapshot, attr: string): string {
+  const lines = [
+    '// Auto-generated Playwright locators. Do not edit by hand.',
+    "import type { Page, Locator } from '@playwright/test';",
+    '',
+    'export const testIds = {',
+  ];
+  for (const id of sortedIds(snapshot)) lines.push(`  ${camelName(id)}: '${id}',`);
+  lines.push('} as const;', '');
+  lines.push('export const locators = (page: Page): Record<string, Locator> => ({');
+  for (const id of sortedIds(snapshot)) {
+    lines.push(`  ${camelName(id)}: page.locator('[${attr}="${id}"]'),`);
+  }
+  lines.push('});', '');
+  return lines.join('\n');
+}
+
+function cypress(snapshot: RegistrySnapshot, attr: string): string {
+  const lines = ['// Auto-generated Cypress locators. Do not edit by hand.', '', 'export const testIds = {'];
+  for (const id of sortedIds(snapshot)) lines.push(`  ${camelName(id)}: '${id}',`);
+  lines.push('} as const;', '');
+  for (const id of sortedIds(snapshot)) {
+    lines.push(`export const get${constName(id).split('_').map((p) => p.charAt(0) + p.slice(1).toLowerCase()).join('')} = () => cy.get('[${attr}="${id}"]');`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+const FILENAME: Record<LocatorTarget, string> = {
+  robot: 'testids.resource',
+  playwright: 'testids.locators.ts',
+  cypress: 'testids.locators.js',
+};
+
+/** Generate locator file(s) for a target. Returns { filename: content }. */
+export function generateLocators(
+  snapshot: RegistrySnapshot,
+  target: LocatorTarget,
+  attributeName: string = DEFAULT_ATTR,
+): Record<string, string> {
+  const attr = attributeName || DEFAULT_ATTR;
+  let content: string;
+  switch (target) {
+    case 'robot': content = robot(snapshot, attr); break;
+    case 'playwright': content = playwright(snapshot, attr); break;
+    case 'cypress': content = cypress(snapshot, attr); break;
+    default: throw new Error(`unknown locator target: ${target as string}`);
+  }
+  return { [FILENAME[target]]: content };
+}
+
+/**
+ * Tolerant wrapper used by the backend service: defaults the attribute, validates
+ * the target, and returns an empty map (rather than throwing) for an empty
+ * registry — keeping the REST/transport surface forgiving.
+ */
+export function generateLocatorsSafe(
+  snapshot: RegistrySnapshot,
+  target: LocatorTarget,
+  attributeName?: string,
+): Record<string, string> {
+  if (!FILENAME[target]) return {};
+  if (Object.keys(snapshot.entries).length === 0) return { [FILENAME[target]]: '' };
+  return generateLocators(snapshot, target, attributeName);
+}
