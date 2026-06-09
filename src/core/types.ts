@@ -100,6 +100,8 @@ export interface EntryDraft {
   identity: string;       // stable matching key (no disambiguator)
   identity_key: string;   // slug used in {key}
   fingerprint: string;    // rich descriptive
+  /** True when this id was taken verbatim from an already-written attribute (not minted). */
+  sticky: boolean;
   signals: NormalizedSignals;
   loc?: SourceLoc;
 }

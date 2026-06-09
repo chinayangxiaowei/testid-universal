@@ -41,7 +41,9 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
     const { short, long } = classify(node.tag, sig, config);
     const key = selectIdentityKey(sig, node.tag);
     const identity = identityOf(node.component, short, key.value);
-    if (!key.stable) {
+    // Only warn about a volatile key for elements that will be freshly minted; an
+    // element that already carries a written id is sticky and is never recomputed.
+    if (!key.stable && !node.existingId) {
       warnings.push({
         code: 'unstable-identity', element_type: long, identity,
         message: `identity for ${identity} comes from "${key.source}" (volatile); add an explicit ${config.explicitKeyAttribute} key for a stable testid`,
@@ -50,33 +52,44 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
     pre.push({ node, short, long, identityKey: key.value, stable: key.stable, fingerprint: fingerprintOf(node.tag, sig), identity });
   }
 
-  const byIdentity = new Map<string, Pre[]>();
+  // Sticky: elements that already carry a written id keep it verbatim. Reserve those
+  // ids so freshly-minted ids can never collide with them.
+  const taken = new Set<string>();
+  for (const p of pre) if (p.node.existingId) taken.add(p.node.existingId);
+
+  // Fresh elements (no written id) are grouped by identity for disambiguation.
+  const freshByIdentity = new Map<string, Pre[]>();
   for (const p of pre) {
-    if (!byIdentity.has(p.identity)) byIdentity.set(p.identity, []);
-    byIdentity.get(p.identity)!.push(p);
+    if (p.node.existingId) continue;
+    if (!freshByIdentity.has(p.identity)) freshByIdentity.set(p.identity, []);
+    freshByIdentity.get(p.identity)!.push(p);
   }
 
   const drafts: EntryDraft[] = [];
   for (const p of pre) {
-    const group = byIdentity.get(p.identity)!;
-    let disambiguator = '';
-    if (group.length > 1) {
-      disambiguator = disambiguate(p, group, warnings);
-    }
     const sig = normalizeSignals(p.node.signals);
-    drafts.push({
-      id: formatId(config.idFormat, {
-        component: p.node.component, element: slugify(p.short), key: slugify(p.identityKey), tag: p.node.tag, disambiguator,
-      }),
-      component: p.node.component,
-      tag: p.node.tag,
-      element_type: p.long,
-      identity: p.identity,
-      identity_key: slugify(p.identityKey),
-      fingerprint: p.fingerprint,
-      signals: sig,
-      loc: p.node.loc,
+    const common = {
+      component: p.node.component, tag: p.node.tag, element_type: p.long,
+      identity: p.identity, identity_key: slugify(p.identityKey),
+      fingerprint: p.fingerprint, signals: sig, loc: p.node.loc,
+    };
+
+    if (p.node.existingId) {
+      drafts.push({ id: p.node.existingId, sticky: true, ...common });
+      continue;
+    }
+
+    const group = freshByIdentity.get(p.identity)!;
+    const disambiguator = group.length > 1 ? disambiguate(p, group, warnings) : '';
+    const render = (dis: string) => formatId(config.idFormat, {
+      component: p.node.component, element: slugify(p.short),
+      key: slugify(p.identityKey), tag: p.node.tag, disambiguator: dis,
     });
+    let id = render(disambiguator);
+    // Global uniqueness: never reuse an id already taken (sticky or an earlier mint).
+    for (let n = 2; taken.has(id); n++) id = render(disambiguator ? `${disambiguator}-${n}` : String(n));
+    taken.add(id);
+    drafts.push({ id, sticky: false, ...common });
   }
   return { drafts, warnings };
 }

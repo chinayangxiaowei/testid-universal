@@ -81,4 +81,29 @@ describe('generate', () => {
     const { drafts } = generate([node({ tag: 'My_Widget', signals: { form_control: 'x' } })], cfg2);
     expect(drafts[0].id).toBe('login__my-widget--x');
   });
+
+  it('keeps an existing written id verbatim instead of recomputing', () => {
+    const { drafts } = generate([
+      node({ tag: 'input', signals: { form_control: 'email' }, existingId: 'legacy__input--whatever' }),
+    ], cfg);
+    expect(drafts[0].id).toBe('legacy__input--whatever');
+    expect(drafts[0].sticky).toBe(true);
+  });
+
+  it('does not warn about a volatile key when the element already has an id', () => {
+    const { warnings } = generate([
+      node({ tag: 'button', signals: { text: 'Save' }, existingId: 'x__button--save' }),
+    ], cfg);
+    expect(warnings.some((w) => w.code === 'unstable-identity')).toBe(false);
+  });
+
+  it('mints a fresh id that does not collide with a sticky id of the same identity', () => {
+    const { drafts } = generate([
+      node({ tag: 'button', signals: { text: 'Save' }, existingId: 'login__button--save' }),
+      node({ tag: 'button', signals: { text: 'Save' } }),
+    ], cfg);
+    const ids = drafts.map((d) => d.id);
+    expect(ids).toContain('login__button--save');
+    expect(new Set(ids).size).toBe(2);
+  });
 });
