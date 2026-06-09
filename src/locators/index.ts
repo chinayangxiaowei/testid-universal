@@ -104,3 +104,20 @@ export function generateLocatorsSafe(
   if (Object.keys(snapshot.entries).length === 0) return { [FILENAME[target]]: '' };
   return generateLocators(snapshot, target, attributeName);
 }
+
+/** The camelCase constant name a test would import for this id (e.g. `loginButtonLogin`). */
+export function constNameForId(id: string): string {
+  return camelName(id);
+}
+
+/**
+ * Emit a framework-agnostic constants module. Tests import these instead of
+ * hardcoding id strings, so a removed/renamed id makes the constant vanish and
+ * the test fails to compile (fail-closed).
+ */
+export function generateConstants(snapshot: RegistrySnapshot): string {
+  const lines = ['// Auto-generated testid constants. Do not edit by hand.', '', 'export const testIds = {'];
+  for (const id of sortedIds(snapshot)) lines.push(`  ${camelName(id)}: '${id}',`);
+  lines.push('} as const;', '');
+  return lines.join('\n');
+}
