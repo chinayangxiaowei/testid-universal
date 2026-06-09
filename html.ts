@@ -11,7 +11,7 @@
  * *.sketch.ts files. The normalization map below is the "vocabulary" seam.
  */
 import { ElementNode, SemanticHints } from '../core/types';
-import { FrameworkAdapter, applyEditsByOffset } from './contract';
+import { FrameworkAdapter } from './contract';
 import { Edit } from '../server/service';
 
 const VOID_TAGS = new Set(['input', 'img', 'br', 'hr', 'meta', 'link']);
@@ -58,8 +58,8 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
       const semantic = normalize(tag, attrs);
       if (text) semantic.text_content = text;
 
-      // end offset = position just before the closing `>` so we inject inside the tag.
-      const tagEnd = m.index + m[0].length - (m[0].endsWith('/>') ? 2 : 1);
+      // end offset = index of the closing '>' so write() can rewrite the whole opening tag.
+      const tagEnd = m.index + m[0].length - 1;
       nodes.push({
         component, tag, semantic,
         existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
@@ -70,7 +70,22 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
   }
 
   write(source: string, edits: Edit[]): string {
-    return applyEditsByOffset(source, edits);
+    // Idempotent: for each tagged element, rewrite its opening tag — strip any
+    // existing data-testid/data-cy first, then add the assigned one. Re-running on
+    // an already-tagged file produces identical output (no duplicate attributes).
+    const ordered = [...edits].sort((a, b) => b.loc.start - a.loc.start);
+    let out = source;
+    for (const e of ordered) {
+      const openTag = out.slice(e.loc.start, e.loc.end + 1);
+      const selfClose = /\/>\s*$/.test(openTag);
+      const inner = openTag
+        .replace(/\/?>\s*$/, '')                                   // drop the closing '>' or '/>'
+        .replace(/\s+(data-testid|data-cy)\s*=\s*"[^"]*"/g, '')     // drop existing test ids
+        .replace(/\s+$/, '');
+      const rebuilt = `${inner} ${e.attributeName}="${e.id}"${selfClose ? ' />' : '>'}`;
+      out = out.slice(0, e.loc.start) + rebuilt + out.slice(e.loc.end + 1);
+    }
+    return out;
   }
 }
 

@@ -57,13 +57,42 @@ the backend API. ~90% of the code.
 
 A working, dependency-free `HtmlTemplateAdapter` is included and is what the demo uses.
 
-## Why a backend (not just a build script)
+## Two ways to use it — same code, your choice
 
-Making the engine + registry a service turns testids into a **centralized authority**:
-any client in any language can `POST /tag` a list of `ElementNode`s and get back
-assigned ids, edits, and a new registry version. Point the storage at Postgres and it
-becomes multi-repo / multi-team. The build-time, file-based mode is just the
-`JsonFileStorage` variant of the same service.
+The engine is a plain library. A **transport** decides whether calls run in-process or
+hit a server, and the pipeline/CLI depend only on that interface:
+
+```ts
+// EMBEDDED (default): no server, nothing to start. Registry persists as JSON files.
+const transport = new LocalTransport(new JsonFileStorage('./test-artifacts/testids'));
+
+// REMOTE: point at a backend. Every downstream call is identical.
+const transport = new HttpTransport('http://localhost:7337');
+```
+
+Same idea on the CLI — embedded by default, `--server` to opt into the service:
+
+```bash
+# embedded — like a normal build tool, zero infrastructure
+testid tag src/app --registry ./test-artifacts/testids
+testid diff 1 2
+testid gen-locators --target playwright --out tests/locators
+
+# centralized — identical commands, add one flag
+testid tag src/app --server http://localhost:7337
+testid gen-locators --target playwright --server http://localhost:7337
+```
+
+So: **library/CLI when you just want it to work; a service when a team wants one
+shared testid authority.** You never rewrite calling code to move between them.
+
+## Why a backend at all
+
+Making the engine + registry a *service* (the `HttpTransport` side) turns testids into
+a centralized authority: any client in any language can `POST /tag` a list of
+`ElementNode`s and get back assigned ids, edits, and a new registry version. Point the
+storage at Postgres and it becomes multi-repo / multi-team. But that is strictly
+opt-in — the embedded mode covers the common case with no moving parts.
 
 ### REST API
 
@@ -77,13 +106,13 @@ GET  /locators?target=robot|playwright|cypress&attr=...     -> { [file]: content
 ## Run it
 
 ```bash
-npm run demo     # end-to-end: tag v1, edit, tag v2, diff (rename+modify), locators, determinism check
-npm run serve    # boot the backend on :7337 (file-backed registry)
+npm run demo     # end-to-end EMBEDDED: tag v1, edit, tag v2, diff (rename+modify), locators, determinism check
+npm run cli -- tag <paths> --registry ./reg    # the CLI, fully embedded (no server)
+npm run serve    # OPTIONAL: boot the backend on :7337 for --server mode
 ```
 
-The demo prints the tagged templates, a PR-style diff that detects the
-`sign-in → login` **rename** (0.9 confidence) and the password-input **modify**, the
-generated locators, and confirms that identical input yields an identical id set.
+Re-running `tag` on an already-tagged file is idempotent — existing ids are rewritten
+in place, never duplicated.
 
 ## Extending
 
