@@ -8,6 +8,7 @@
 export * from './core';
 export * from './registry';
 export * from './locators';
+export * from './testmap';
 export * from './adapters';
 export * from './server/service';
 export * from './client/transport';
