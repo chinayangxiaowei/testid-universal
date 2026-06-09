@@ -88,7 +88,7 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
     const group = freshByIdentity.get(p.identity)!;
     const disambiguator = group.length > 1 ? disambiguate(p, group, warnings) : '';
     const render = (dis: string) => formatId(config.idFormat, {
-      component: p.node.component, element: slugify(p.short),
+      component: slugify(p.node.component), element: slugify(p.short),
       key: slugify(p.identityKey), tag: p.node.tag, disambiguator: dis,
     });
     let id = render(disambiguator);

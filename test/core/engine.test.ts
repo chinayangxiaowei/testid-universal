@@ -120,4 +120,13 @@ describe('generate', () => {
     ], cfg);
     expect(warnings.some((w) => w.code === 'loop-multiplicity')).toBe(false);
   });
+
+  it('slugifies the component token so the id matches the identity casing', () => {
+    const { drafts } = generate([
+      node({ component: 'LoginPage', tag: 'input', signals: { form_control: 'email' } }),
+    ], cfg);
+    // slugify lowercases (no camelCase splitting); the point is id casing == identity casing.
+    expect(drafts[0].id).toBe('loginpage__input--email');
+    expect(drafts[0].identity).toBe('loginpage::input::email');
+  });
 });
