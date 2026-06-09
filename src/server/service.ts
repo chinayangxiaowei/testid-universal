@@ -57,7 +57,7 @@ export class TestIdService {
     return this.storage.loadLatest();
   }
 
-  async diff(fromVersion: number, toVersion: number, threshold = 0.8): Promise<DiffResult | null> {
+  async diff(fromVersion: number, toVersion: number, _threshold = 0.8): Promise<DiffResult | null> {
     const a = await this.storage.loadVersion(fromVersion);
     const b = await this.storage.loadVersion(toVersion);
     if (!a || !b) return null;

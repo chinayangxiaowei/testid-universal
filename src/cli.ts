@@ -66,6 +66,10 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
   }
   console.log(`registry version ${result.version}${flags.server ? ` (remote ${flags.server})` : ` (${registryDir})`}`);
   if (result.overrides.length) console.log(`manual overrides: ${result.overrides.join(', ')}`);
+  if (result.warnings.length) {
+    console.warn(`\n${result.warnings.length} identity warning(s):`);
+    for (const w of result.warnings) console.warn(`  - ${w.message}`);
+  }
 }
 
 async function cmdDiff(positional: string[], flags: Record<string, string | boolean>) {

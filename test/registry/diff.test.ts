@@ -41,6 +41,13 @@ describe('diff (exact identity match)', () => {
     expect(d.regenerated[0].id).toBe('reborn');
   });
 
+  it('reports a changed map field (event_handlers) in the change list', () => {
+    const v1 = snapshot(1, { b: e('login::button::login', { event_handlers: { click: 'go' } }, 'F1') });
+    const v2 = snapshot(2, { b: e('login::button::login', { event_handlers: { click: 'submit' } }, 'F2') });
+    const d = diff(v1, v2);
+    expect(d.modified[0].changes.some((c) => c.field === 'event_handlers')).toBe(true);
+  });
+
   it('reports both elements of a same-identity group (no silent overwrite)', () => {
     const v1 = snapshot(1, {
       'login__button--save': entry({ identity: 'login::button::save', fingerprint: 'A' }),

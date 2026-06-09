@@ -66,7 +66,7 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
     const sig = normalizeSignals(p.node.signals);
     drafts.push({
       id: formatId(config.idFormat, {
-        component: p.node.component, element: p.short, key: slugify(p.identityKey), tag: p.node.tag, disambiguator,
+        component: p.node.component, element: slugify(p.short), key: slugify(p.identityKey), tag: p.node.tag, disambiguator,
       }),
       component: p.node.component,
       tag: p.node.tag,

@@ -75,4 +75,10 @@ describe('generate', () => {
     expect(new Set(drafts.map((d) => d.id)).size).toBe(2);
     expect(drafts.map((d) => d.id)).toEqual(['login__input--email', 'login__input--email--2']);
   });
+
+  it('slugifies a custom element short in the id', () => {
+    const cfg2 = { ...cfg, customTagMap: { My_Widget: { short: 'My_Widget', long: 'custom' } } };
+    const { drafts } = generate([node({ tag: 'My_Widget', signals: { form_control: 'x' } })], cfg2);
+    expect(drafts[0].id).toBe('login__my-widget--x');
+  });
 });

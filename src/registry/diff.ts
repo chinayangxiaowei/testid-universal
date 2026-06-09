@@ -30,11 +30,27 @@ function scalarFields(s: NormalizedSignals): Record<string, string | null> {
   };
 }
 
+function mapFields(s: NormalizedSignals): Record<string, string> {
+  const ser = (m: Record<string, string>) => Object.keys(m).sort().map((k) => `${k}=${m[k]}`).join(',');
+  return {
+    event_handlers: ser(s.event_handlers),
+    bound_identifiers: ser(s.bound_identifiers),
+    structural: ser(s.structural),
+    context: ser(s.context),
+    child_shape: s.child_shape.join(','),
+    semantic_css: s.semantic_css.join(','),
+  };
+}
+
 export function diffSignals(a: NormalizedSignals, b: NormalizedSignals): SignalChange[] {
-  const af = scalarFields(a), bf = scalarFields(b);
   const changes: SignalChange[] = [];
-  for (const field of Object.keys(af)) {
-    if (af[field] !== bf[field]) changes.push({ field, old: af[field], new: bf[field] });
+  const as = scalarFields(a), bs = scalarFields(b);
+  for (const field of Object.keys(as)) {
+    if (as[field] !== bs[field]) changes.push({ field, old: as[field], new: bs[field] });
+  }
+  const am = mapFields(a), bm = mapFields(b);
+  for (const field of Object.keys(am)) {
+    if (am[field] !== bm[field]) changes.push({ field, old: am[field] || null, new: bm[field] || null });
   }
   return changes;
 }

@@ -6,7 +6,7 @@
  * The transport may be LocalTransport (in-process, no server) or HttpTransport
  * (remote). The pipeline cannot tell the difference — that is the whole point.
  */
-import { CoreConfig } from '../core/types';
+import { CoreConfig, Warning } from '../core/types';
 import { FrameworkAdapter } from '../adapters/contract';
 import { TestIdTransport } from './transport';
 
@@ -17,7 +17,7 @@ export async function runPipeline(
   transport: TestIdTransport,
   files: { file: string; component: string; source: string }[],
   config?: Partial<CoreConfig>,
-): Promise<{ tagged: TaggedFile[]; version: number; overrides: string[] }> {
+): Promise<{ tagged: TaggedFile[]; version: number; overrides: string[]; warnings: Warning[] }> {
   // 1. Parse every file into the shared IR (the only framework-aware step).
   const nodes = files.flatMap((f) => adapter.parse(f.source, f.file, f.component));
 
@@ -40,5 +40,5 @@ export async function runPipeline(
     after: adapter.write(f.source, editsByFile.get(f.file) ?? []),
   }));
 
-  return { tagged, version: resp.version, overrides: resp.overrides };
+  return { tagged, version: resp.version, overrides: resp.overrides, warnings: resp.warnings };
 }
