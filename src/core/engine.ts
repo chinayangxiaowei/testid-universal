@@ -1,78 +1,101 @@
-/**
- * Engine — the pure, framework-agnostic pipeline.
- *
- *   ElementNode[]  ->  EntryDraft[]
- *
- * For each node: classify, extract key, fingerprint, format id. Then resolve
- * collisions: ids that collide but describe genuinely different elements (distinct
- * fingerprints) get a deterministic hash suffix; identical elements keep one id.
- *
- * This function is a PURE function of (nodes, config). Same input -> same output,
- * every run. No history, no I/O — that belongs to the registry layer.
- */
-import { ElementNode, EntryDraft, CoreConfig } from './types';
+import { ElementNode, EntryDraft, CoreConfig, Warning } from './types';
+import { normalizeSignals } from './signals';
 import { classify } from './classify';
-import { keyFor } from './semantic';
-import { fingerprintOf, hashOf } from './fingerprint';
+import { slugify } from './semantic';
+import { selectIdentityKey, identityOf } from './identity';
+import { fingerprintOf } from './fingerprint';
 import { formatId } from './format';
 
 export function shouldTag(node: ElementNode, config: CoreConfig): boolean {
-  if (config.ignoreTags.includes(node.tag) || config.ignoreTags.includes(node.tag.toLowerCase())) {
-    return false;
-  }
-  // A node is taggable if it carries ANY semantic signal, or already has an id.
-  // Pure decorative wrappers (no semantics at all) are skipped — mirroring the
-  // "wrapping layouts that carry no semantics are skipped" rule.
+  const tag = node.tag;
+  if (config.ignoreTags.includes(tag) || config.ignoreTags.includes(tag.toLowerCase())) return false;
   if (node.existingId) return true;
-  return Object.values(node.semantic).some((v) => v != null && String(v).trim() !== '');
+  const s = node.signals;
+  return Object.values(s).some((v) => {
+    if (v == null) return false;
+    if (typeof v === 'string') return v.trim() !== '';
+    if (Array.isArray(v)) return v.length > 0;
+    return Object.keys(v).length > 0;
+  });
 }
 
-export function generate(nodes: ElementNode[], config: CoreConfig): EntryDraft[] {
-  const taggable = nodes.filter((n) => shouldTag(n, config));
+export interface GenerateResult { drafts: EntryDraft[]; warnings: Warning[] }
 
-  // Pass 1: compute everything except the hash suffix.
-  type Pre = { node: ElementNode; element: string; long: string; key: string; fp: string; baseId: string };
-  const pre: Pre[] = taggable.map((node) => {
-    const cls = classify(node, config);
-    const key = keyFor(node, config);
-    const fp = fingerprintOf(node);
-    const baseId = formatId(config.idFormat, {
-      component: node.component, element: cls.short, key, tag: node.tag, hash: '',
-    });
-    return { node, element: cls.short, long: cls.long, key, fp, baseId };
-  });
+interface Pre {
+  node: ElementNode;
+  short: string;
+  long: string;
+  identityKey: string;
+  stable: boolean;
+  fingerprint: string;
+  identity: string;
+}
 
-  // Pass 2: detect collisions on baseId across *distinct* fingerprints.
-  const fpsByBase = new Map<string, Set<string>>();
-  for (const p of pre) {
-    if (!fpsByBase.has(p.baseId)) fpsByBase.set(p.baseId, new Set());
-    fpsByBase.get(p.baseId)!.add(p.fp);
+export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResult {
+  const warnings: Warning[] = [];
+  const pre: Pre[] = [];
+
+  for (const node of nodes) {
+    if (!shouldTag(node, config)) continue;
+    const sig = normalizeSignals(node.signals);
+    const { short, long } = classify(node.tag, sig, config);
+    const key = selectIdentityKey(sig, node.tag);
+    const identity = identityOf(node.component, short, key.value);
+    if (!key.stable) {
+      warnings.push({
+        code: 'unstable-identity', element_type: long, identity,
+        message: `identity for ${identity} comes from "${key.source}" (volatile); add an explicit ${config.explicitKeyAttribute} key for a stable testid`,
+      });
+    }
+    pre.push({ node, short, long, identityKey: key.value, stable: key.stable, fingerprint: fingerprintOf(node.tag, sig), identity });
   }
 
-  // Pass 3: emit drafts, adding a hash suffix only where a base id is contested.
-  const out: EntryDraft[] = [];
+  const byIdentity = new Map<string, Pre[]>();
   for (const p of pre) {
-    const contested = (fpsByBase.get(p.baseId)?.size ?? 0) > 1;
-    let hash = '';
-    if (contested) {
-      if (config.collisionStrategy === 'error') {
-        throw new Error(`testid collision on "${p.baseId}" with distinct fingerprints`);
-      }
-      hash = hashOf(p.fp, config);
+    if (!byIdentity.has(p.identity)) byIdentity.set(p.identity, []);
+    byIdentity.get(p.identity)!.push(p);
+  }
+
+  const drafts: EntryDraft[] = [];
+  for (const p of pre) {
+    const group = byIdentity.get(p.identity)!;
+    let disambiguator = '';
+    if (group.length > 1) {
+      disambiguator = disambiguate(p, group, warnings);
     }
-    const id = formatId(config.idFormat, {
-      component: p.node.component, element: p.element, key: p.key, tag: p.node.tag, hash,
-    });
-    out.push({
-      id,
+    const sig = normalizeSignals(p.node.signals);
+    drafts.push({
+      id: formatId(config.idFormat, {
+        component: p.node.component, element: p.short, key: slugify(p.identityKey), tag: p.node.tag, disambiguator,
+      }),
       component: p.node.component,
       tag: p.node.tag,
       element_type: p.long,
-      fingerprint: p.fp,
-      semantic: p.node.semantic,
-      key: p.key,
+      identity: p.identity,
+      identity_key: slugify(p.identityKey),
+      fingerprint: p.fingerprint,
+      signals: sig,
       loc: p.node.loc,
     });
   }
-  return out;
+  return { drafts, warnings };
+}
+
+/** Prefer a distinguishing stable token; else a positional index (1-based) + warning. */
+function disambiguate(p: Pre, group: Pre[], warnings: Warning[]): string {
+  const sig = normalizeSignals(p.node.signals);
+  const stableToken = sig.html_id ?? sig.route ?? Object.values(sig.bound_identifiers)[0] ?? null;
+  if (stableToken) {
+    const distinct = new Set(group.map((g) => {
+      const gs = normalizeSignals(g.node.signals);
+      return gs.html_id ?? gs.route ?? Object.values(gs.bound_identifiers)[0] ?? '';
+    }));
+    if (distinct.size === group.length) return slugify(stableToken);
+  }
+  const index = group.indexOf(p) + 1;
+  warnings.push({
+    code: 'positional-disambiguator', element_type: p.long, identity: p.identity,
+    message: `${p.identity} has ${group.length} indistinguishable elements; using positional index ${index}. Add an explicit key for stable ids.`,
+  });
+  return index === 1 ? '' : String(index);
 }

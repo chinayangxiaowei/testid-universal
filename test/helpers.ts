@@ -3,7 +3,7 @@ import { RegistryEntry, RegistrySnapshot } from '../src/registry/storage';
 
 /** Build an ElementNode with sensible defaults; override what a test cares about. */
 export function node(partial: Partial<ElementNode> & { tag: string }): ElementNode {
-  return { component: 'login', semantic: {}, ...partial };
+  return { component: 'login', signals: {}, ...partial };
 }
 
 /** Build a RegistryEntry; only `fingerprint` and `component` really matter for diff tests. */
