@@ -40,4 +40,18 @@ describe('diff (exact identity match)', () => {
     expect(d.summary.regenerated).toBe(1);
     expect(d.regenerated[0].id).toBe('reborn');
   });
+
+  it('reports both elements of a same-identity group (no silent overwrite)', () => {
+    const v1 = snapshot(1, {
+      'login__button--save': entry({ identity: 'login::button::save', fingerprint: 'A' }),
+      'login__button--save--2': entry({ identity: 'login::button::save', fingerprint: 'B' }),
+    });
+    const v2 = snapshot(2, {
+      'login__button--save': entry({ identity: 'login::button::save', fingerprint: 'A' }),
+    });
+    const d = diff(v1, v2);
+    expect(d.summary.unchanged).toBe(1);
+    expect(d.summary.removed).toBe(1);
+    expect(d.removed[0].id).toBe('login__button--save--2');
+  });
 });

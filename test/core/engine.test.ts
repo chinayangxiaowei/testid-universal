@@ -65,4 +65,14 @@ describe('generate', () => {
     expect(new Set(drafts.map((d) => d.id)).size).toBe(2);
     expect(drafts.every((d) => !d.id.includes('--2'))).toBe(true);
   });
+
+  it('keeps ids unique when a stable token would clash with a positional index', () => {
+    // Same identity (key = form_control "email"); one has html_id "2", the other has no stable token.
+    const { drafts } = generate([
+      node({ tag: 'input', signals: { form_control: 'email', html_id: '2' } }),
+      node({ tag: 'input', signals: { form_control: 'email' } }),
+    ], cfg);
+    expect(new Set(drafts.map((d) => d.id)).size).toBe(2);
+    expect(drafts.map((d) => d.id)).toEqual(['login__input--email', 'login__input--email--2']);
+  });
 });

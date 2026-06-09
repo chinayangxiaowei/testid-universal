@@ -81,21 +81,26 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
   return { drafts, warnings };
 }
 
-/** Prefer a distinguishing stable token; else a positional index (1-based) + warning. */
+/**
+ * Group-coherent disambiguation. If EVERY member of the same-identity group has a
+ * distinct, non-empty stable-token slug, use that slug for all members; otherwise
+ * assign positional indices to all members (with a warning). Keeping the whole group
+ * on one scheme guarantees a stable-token slug can never collide with a positional index.
+ */
 function disambiguate(p: Pre, group: Pre[], warnings: Warning[]): string {
-  const sig = normalizeSignals(p.node.signals);
-  const stableToken = sig.html_id ?? sig.route ?? Object.values(sig.bound_identifiers)[0] ?? null;
-  if (stableToken) {
-    const distinct = new Set(group.map((g) => {
-      const gs = normalizeSignals(g.node.signals);
-      return gs.html_id ?? gs.route ?? Object.values(gs.bound_identifiers)[0] ?? '';
-    }));
-    if (distinct.size === group.length) return slugify(stableToken);
+  const slugTokens = group.map((g) => {
+    const gs = normalizeSignals(g.node.signals);
+    const tok = gs.html_id ?? gs.route ?? Object.values(gs.bound_identifiers)[0] ?? null;
+    return tok ? slugify(tok) : null;
+  });
+  const allDistinctPresent = slugTokens.every((t): t is string => !!t) && new Set(slugTokens).size === group.length;
+  if (allDistinctPresent) {
+    return slugTokens[group.indexOf(p)]!;
   }
-  const index = group.indexOf(p) + 1;
+  const index = group.indexOf(p);
   warnings.push({
     code: 'positional-disambiguator', element_type: p.long, identity: p.identity,
-    message: `${p.identity} has ${group.length} indistinguishable elements; using positional index ${index}. Add an explicit key for stable ids.`,
+    message: `${p.identity} has ${group.length} indistinguishable elements; using positional index ${index + 1}. Add an explicit key for stable ids.`,
   });
-  return index === 1 ? '' : String(index);
+  return index === 0 ? '' : String(index + 1);
 }

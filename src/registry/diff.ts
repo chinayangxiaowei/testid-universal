@@ -5,7 +5,7 @@
  * fingerprint fields, so the element is still locatable and you only revisit a
  * test when an asserted field changed.
  */
-import { RegistrySnapshot, RegistryEntry } from './storage';
+import { RegistrySnapshot } from './storage';
 import { NormalizedSignals } from '../core/types';
 
 export interface SignalChange { field: string; old: string | null; new: string | null }
@@ -39,35 +39,26 @@ export function diffSignals(a: NormalizedSignals, b: NormalizedSignals): SignalC
   return changes;
 }
 
-function byIdentity(snap: RegistrySnapshot): Map<string, { id: string; entry: RegistryEntry }> {
-  const m = new Map<string, { id: string; entry: RegistryEntry }>();
-  for (const [id, entry] of Object.entries(snap.entries)) m.set(entry.identity, { id, entry });
-  return m;
-}
-
 export function diff(from: RegistrySnapshot, to: RegistrySnapshot): DiffResult {
-  const fromMap = byIdentity(from);
-  const toMap = byIdentity(to);
-
   const added: SimpleEntry[] = [];
   const removed: SimpleEntry[] = [];
   const modified: ModifyEntry[] = [];
   const regenerated: SimpleEntry[] = [];
   let unchanged = 0;
 
-  for (const [identity, { id, entry }] of toMap) {
-    const prev = fromMap.get(identity);
+  for (const [id, entry] of Object.entries(to.entries)) {
+    const prev = from.entries[id];
     if (prev) {
-      if (prev.entry.fingerprint === entry.fingerprint) unchanged++;
-      else modified.push({ id, identity, component: entry.component, changes: diffSignals(prev.entry.signals, entry.signals) });
+      if (prev.fingerprint === entry.fingerprint) unchanged++;
+      else modified.push({ id, identity: entry.identity, component: entry.component, changes: diffSignals(prev.signals, entry.signals) });
     } else if ((entry.generation_history?.length ?? 0) > 1) {
-      regenerated.push({ id, identity, component: entry.component });
+      regenerated.push({ id, identity: entry.identity, component: entry.component });
     } else {
-      added.push({ id, identity, component: entry.component });
+      added.push({ id, identity: entry.identity, component: entry.component });
     }
   }
-  for (const [identity, { id, entry }] of fromMap) {
-    if (!toMap.has(identity)) removed.push({ id, identity, component: entry.component });
+  for (const [id, entry] of Object.entries(from.entries)) {
+    if (!to.entries[id]) removed.push({ id, identity: entry.identity, component: entry.component });
   }
 
   const cmp = (a: SimpleEntry, b: SimpleEntry) => a.id.localeCompare(b.id);
