@@ -1,0 +1,64 @@
+/**
+ * Registry reconciliation.
+ *
+ * Takes the engine's pure drafts plus the previous snapshot and produces the next
+ * versioned snapshot. This is where the "memory" lives: first/last-seen versions,
+ * generated-vs-manual provenance, and regeneration history (an id that vanished
+ * and later came back). None of this is framework-specific.
+ */
+import { EntryDraft } from '../core/types';
+import { RegistrySnapshot, RegistryEntry, RegistryStorage } from './storage';
+
+export interface ReconcileResult {
+  snapshot: RegistrySnapshot;
+  overrides: string[]; // ids where a manual entry shadowed a generated one
+}
+
+function toSemanticRecord(semantic: EntryDraft['semantic']): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(semantic)) out[k] = v == null ? null : String(v);
+  return out;
+}
+
+export async function reconcile(
+  drafts: EntryDraft[],
+  storage: RegistryStorage,
+  now: string = new Date().toISOString(),
+): Promise<ReconcileResult> {
+  const prev = await storage.loadLatest();
+  const prevEntries = prev?.entries ?? {};
+  const version = (prev?.version ?? 0) + 1;
+  const overrides: string[] = [];
+
+  const entries: Record<string, RegistryEntry> = {};
+  for (const d of drafts) {
+    const existing = prevEntries[d.id];
+    const everSeen = existing != null;
+    const wasPresentLast = existing?.last_seen_version === prev?.version;
+
+    // Manual entries (someone hand-wrote this id) are preserved as 'manual'.
+    const source: RegistryEntry['source'] = existing?.source === 'manual' ? 'manual' : 'generated';
+    if (existing?.source === 'manual') overrides.push(d.id);
+
+    // generation_history records every version in which the id was (re)created.
+    let history = existing?.generation_history ?? [];
+    if (!everSeen || !wasPresentLast) history = [...history, version]; // first time or regenerated
+
+    entries[d.id] = {
+      component: d.component,
+      tag: d.tag,
+      element_type: d.element_type,
+      fingerprint: d.fingerprint,
+      semantic: toSemanticRecord(d.semantic),
+      source,
+      first_seen_version: existing?.first_seen_version ?? version,
+      last_seen_version: version,
+      last_generated_at: now,
+      generation_history: history,
+    };
+  }
+
+  const snapshot: RegistrySnapshot = { version, generated_at: now, entries };
+  await storage.save(snapshot);
+  return { snapshot, overrides };
+}
