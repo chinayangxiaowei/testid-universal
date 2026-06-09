@@ -129,6 +129,13 @@ scanning tests. `source: 'generated' | 'manual' | 'sticky'`.
 3. **Name rot** from sticky ids (3.1). Mitigated by the re-test signal + explicit `--regenerate`.
 4. **Per-framework symbol resolution** is real work and exists only where an adapter implements
    it; absent it, L2 degrades to name-only (current behavior) and that gap must be reported.
+5. **`--regenerate` can orphan an id on a signal-less element (Phase A known limitation).**
+   `--regenerate` clears written ids to force a re-mint, but an element that was taggable
+   *only* because it carried that id (no minting signal of its own, e.g. `<span
+   data-testid="x">`) is then skipped by `shouldTag`, leaving its stale `data-testid` in the
+   source and untracked in the registry. Such elements should carry a real signal or an
+   explicit `data-tid`; `--regenerate` assumes a mintable element. Deferred fix: emit a
+   strip-only edit for skipped elements that previously had an id.
 
 ## 5. Phasing (each phase ships value; each gets its own implementation plan)
 
