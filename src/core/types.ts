@@ -96,38 +96,30 @@ export interface EntryDraft {
   id: string;
   component: string;
   tag: string;
-  element_type: string;
-  fingerprint: string;
-  semantic: Partial<SemanticHints>;
-  key: string;
+  element_type: string;   // long form
+  identity: string;       // stable matching key (no disambiguator)
+  identity_key: string;   // slug used in {key}
+  fingerprint: string;    // rich descriptive
+  signals: NormalizedSignals;
   loc?: SourceLoc;
 }
 
 export interface CustomTagMapEntry { short: string; long: string; }
 
 export interface CoreConfig {
-  /** Priority order for choosing {key}. First non-empty wins; falls back to the tag name. */
-  keyPriority: (keyof SemanticHints)[];
-  /** Naming template. Tokens: {component} {element} {key} {tag} {hash} {hash:-} plus literals. */
+  /** Naming template. Tokens: {component} {element} {key} {tag} {disambiguator} {disambiguator:--}. */
   idFormat: string;
-  /** The attribute that will hold the id, e.g. "data-testid" or "data-cy". */
   attributeName: string;
-  hashAlgorithm: 'sha256' | 'sha1' | 'md5';
-  hashLength: number;                       // 4..16
-  collisionStrategy: 'hash-suffix' | 'error';
+  /** Attribute an adapter reads as the explicit stable key (Tier 0). */
+  explicitKeyAttribute: string;
   customTagMap: Record<string, CustomTagMapEntry>;
-  /** Tag names that should never be tagged. */
   ignoreTags: string[];
 }
 
 export const DEFAULT_CONFIG: CoreConfig = {
-  // aria_label first mirrors the original tool's "most-meaningful label wins" intent.
-  keyPriority: ['aria_label', 'field_name', 'name', 'placeholder', 'text_content', 'route'],
-  idFormat: '{component}__{element}--{key}{hash:-}',
+  idFormat: '{component}__{element}--{key}{disambiguator:--}',
   attributeName: 'data-testid',
-  hashAlgorithm: 'sha256',
-  hashLength: 6,
-  collisionStrategy: 'hash-suffix',
+  explicitKeyAttribute: 'data-tid',
   customTagMap: {},
   ignoreTags: [],
 };
