@@ -106,4 +106,18 @@ describe('generate', () => {
     expect(ids).toContain('login__button--save');
     expect(new Set(ids).size).toBe(2);
   });
+
+  it('warns about loop multiplicity for an element inside a loop', () => {
+    const { warnings } = generate([
+      node({ tag: 'button', signals: { event_handlers: { click: 'edit' } }, inLoop: true }),
+    ], cfg);
+    expect(warnings.some((w) => w.code === 'loop-multiplicity')).toBe(true);
+  });
+
+  it('does not emit a loop warning for a normal element', () => {
+    const { warnings } = generate([
+      node({ tag: 'button', signals: { event_handlers: { click: 'edit' } } }),
+    ], cfg);
+    expect(warnings.some((w) => w.code === 'loop-multiplicity')).toBe(false);
+  });
 });

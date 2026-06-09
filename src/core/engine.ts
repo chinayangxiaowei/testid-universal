@@ -49,6 +49,12 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
         message: `identity for ${identity} comes from "${key.source}" (volatile); add an explicit ${config.explicitKeyAttribute} key for a stable testid`,
       });
     }
+    if (node.inLoop) {
+      warnings.push({
+        code: 'loop-multiplicity', element_type: long, identity,
+        message: `${identity} is inside a loop (v-for / *ngFor): one static id is shared by every rendered instance. Bind a per-item id instead (e.g. a :data-testid bound to the item's key).`,
+      });
+    }
     pre.push({ node, short, long, identityKey: key.value, stable: key.stable, fingerprint: fingerprintOf(node.tag, sig), identity });
   }
 

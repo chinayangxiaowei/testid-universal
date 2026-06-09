@@ -61,7 +61,7 @@ export interface NormalizedSignals {
 }
 
 export interface Warning {
-  code: 'unstable-identity' | 'positional-disambiguator';
+  code: 'unstable-identity' | 'positional-disambiguator' | 'loop-multiplicity';
   element_type: string;
   identity: string;
   message: string;
@@ -83,6 +83,9 @@ export interface ElementNode {
   signals: RawSignals;
   loc?: SourceLoc;
   existingId?: string | null;
+  /** True when this element is inside a loop (v-for / *ngFor): one static id will be
+   *  shared by every rendered instance. Set by the adapter. */
+  inLoop?: boolean;
 }
 
 /** Coarse element classification, e.g. {short:"input", long:"native_input_email"}. */
