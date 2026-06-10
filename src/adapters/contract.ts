@@ -19,6 +19,14 @@ export interface FrameworkAdapter {
   write(source: string, edits: Edit[]): string;
   /** Per-framework defaults, e.g. its customTagMap for the local component library. */
   customTagMap?: Record<string, { short: string; long: string }>;
+  /**
+   * OPTIONAL L2 capability (dual-map spec §3.3): resolve template-referenced symbol
+   * names to their definition SOURCE TEXT in this file's script. Return null for a
+   * name that cannot be resolved (template-local, options API, etc.). Core — never
+   * the adapter — normalizes and hashes the text. Adapters without this capability
+   * simply produce no symbol_defs (name-only tracking, the pre-Phase-D behavior).
+   */
+  resolveSymbolDefs?(names: string[], source: string, file: string): Record<string, string | null>;
 }
 
 /**

@@ -30,11 +30,14 @@ const NODE_TEXT = 2;
 const PROP_ATTRIBUTE = 6;
 const PROP_DIRECTIVE = 7;
 
-type VueSfcParse = (source: string) => { descriptor: { template?: { ast?: VueNode } }; errors: unknown[] };
+type VueSfc = {
+  parse: (source: string, opts?: { filename?: string }) => { descriptor: any; errors: unknown[] };
+  compileScript: (descriptor: any, opts: { id: string }) => { scriptSetupAst?: any[] };
+};
 
-function loadVueParse(): VueSfcParse {
+function loadVueSfc(): VueSfc {
   try {
-    return require('@vue/compiler-sfc').parse as VueSfcParse;
+    return require('@vue/compiler-sfc') as VueSfc;
   } catch {
     throw new Error(
       'VueAdapter requires the optional peer dependency "@vue/compiler-sfc". Install it: npm i -D @vue/compiler-sfc',
@@ -119,7 +122,7 @@ export class VueAdapter implements FrameworkAdapter {
   }
 
   parse(source: string, file: string, component: string): ElementNode[] {
-    const root = loadVueParse()(source).descriptor.template?.ast;
+    const root = loadVueSfc().parse(source).descriptor.template?.ast as VueNode | undefined;
     if (!root) return [];
 
     const nodes: ElementNode[] = [];
@@ -152,5 +155,41 @@ export class VueAdapter implements FrameworkAdapter {
 
   write(source: string, edits: Edit[]): string {
     return applyTestIdEdits(source, edits);
+  }
+
+  /**
+   * L2 resolver: map referenced names to their <script setup> top-level definition
+   * text. Imported names resolve to their import statement only (opaque boundary);
+   * names with no top-level declaration (template locals, options API) yield null.
+   */
+  resolveSymbolDefs(names: string[], source: string, file: string): Record<string, string | null> {
+    const out: Record<string, string | null> = {};
+    for (const n of names) out[n] = null;
+    const sfc = loadVueSfc();
+    const { descriptor } = sfc.parse(source, { filename: file });
+    if (!descriptor.scriptSetup) return out;
+    let ast: any[] | undefined;
+    try {
+      ast = sfc.compileScript(descriptor, { id: file }).scriptSetupAst;
+    } catch {
+      return out; // unparsable script: resolve nothing rather than something wrong
+    }
+    if (!ast) return out;
+    const content: string = descriptor.scriptSetup.content;
+    const slice = (node: any) => content.slice(node.start, node.end);
+    for (const node of ast) {
+      if (node.type === 'FunctionDeclaration' && node.id && names.includes(node.id.name)) {
+        out[node.id.name] = slice(node);
+      } else if (node.type === 'VariableDeclaration') {
+        for (const d of node.declarations) {
+          if (d.id?.type === 'Identifier' && names.includes(d.id.name)) out[d.id.name] = slice(node);
+        }
+      } else if (node.type === 'ImportDeclaration') {
+        for (const s of node.specifiers ?? []) {
+          if (names.includes(s.local?.name)) out[s.local.name] = slice(node);
+        }
+      }
+    }
+    return out;
   }
 }

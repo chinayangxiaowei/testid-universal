@@ -126,3 +126,47 @@ function remove(u) { void u; }
     expect(del.inLoop).toBe(true);
   });
 });
+
+describe('VueAdapter.resolveSymbolDefs', () => {
+  const SFC = `<template>
+  <button @click="saveOrder">Save</button>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+import { submit } from './api';
+const email = ref('');
+function saveOrder() {
+  return submit(email.value);
+}
+</script>
+`;
+  const adapter = new VueAdapter();
+
+  it('resolves a local function to its full definition text', () => {
+    const defs = adapter.resolveSymbolDefs!(['saveOrder'], SFC, 'X.vue');
+    expect(defs.saveOrder).toContain('function saveOrder()');
+    expect(defs.saveOrder).toContain('submit(email.value)');
+  });
+
+  it('resolves a const binding to its declaration text', () => {
+    const defs = adapter.resolveSymbolDefs!(['email'], SFC, 'X.vue');
+    expect(defs.email).toBe("const email = ref('');");
+  });
+
+  it('resolves an imported name to its import statement only (L3 opaque boundary)', () => {
+    const defs = adapter.resolveSymbolDefs!(['submit'], SFC, 'X.vue');
+    expect(defs.submit).toBe("import { submit } from './api';");
+  });
+
+  it('returns null for template-local / unknown names', () => {
+    const defs = adapter.resolveSymbolDefs!(['u', 'nope'], SFC, 'X.vue');
+    expect(defs.u).toBeNull();
+    expect(defs.nope).toBeNull();
+  });
+
+  it('returns all-null when there is no script setup', () => {
+    const noScript = '<template><button @click="go">Go</button></template>';
+    expect(adapter.resolveSymbolDefs!(['go'], noScript, 'Y.vue')).toEqual({ go: null });
+  });
+});
