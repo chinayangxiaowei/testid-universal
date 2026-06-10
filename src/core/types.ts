@@ -86,6 +86,12 @@ export interface ElementNode {
   /** True when this element is inside a loop (v-for / *ngFor): one static id will be
    *  shared by every rendered instance. Set by the adapter. */
   inLoop?: boolean;
+  /**
+   * Raw definition source text for symbols this element references, resolved by the
+   * adapter (null = referenced but unresolvable). Filled by the pipeline; core
+   * normalizes + hashes it — adapters never produce hashes themselves.
+   */
+  symbol_sources?: Record<string, string | null>;
 }
 
 /** Coarse element classification, e.g. {short:"input", long:"native_input_email"}. */
@@ -107,6 +113,8 @@ export interface EntryDraft {
   sticky: boolean;
   /** Positional or stable-token disambiguator suffix; '' when none. */
   disambiguator: string;
+  /** Hashes of referenced symbol definitions (the L2 source-dependency layer). */
+  symbol_defs: Record<string, string>;
   signals: NormalizedSignals;
   loc?: SourceLoc;
 }
