@@ -57,3 +57,33 @@ Adding a field → diff shows exactly `1 added, 0 churn`. Elements with `v-model
 2. **D** CLI cannot do Vue — blocks the basic Vue workflow.
 3. **B** component not slugified — trivial correctness fix.
 4. **C** tag-filter to cut warning noise — ergonomics.
+
+## F. Phase D simulation (2026-06-10) — source-dependency re-test triggering works end to end
+
+Lifecycle v4→v6 on the same sim app, with the Phase D tool (symbol_defs tracking):
+
+1. **v4 baseline over a pre-Phase-D registry: ZERO migration noise.** diff v3→v4 =
+   20 unchanged / 0 modified; the run silently recorded the symbol baseline.
+2. **v5: edited ONLY `onSubmit`'s body** (template untouched). 0 files rewritten, all ids
+   frozen; diff flagged exactly the 2 elements wired to it (`LoginPage__form--onsubmit`,
+   `LoginPage__button--onsubmit`) as `modified { symbol:onSubmit }`. The other 18 stayed calm.
+3. **v6: changed `email = ref('')` initial value** (the `v-model` target's declaration).
+   diff flagged exactly `LoginPage__input--email` as `modified { symbol:email }` — and the
+   `onSubmit`-wired elements stayed calm even though `onSubmit`'s body *reads* `email`,
+   demonstrating the documented boundary: element→symbol direct references only, no
+   symbol→symbol transitive following (spec §3.3 L3).
+
+This is the NORTH STAR's second half working on real project data: tests can be routed to
+re-test from a pure script-side behavior change, with ids (locators) completely stable.
+
+## Status update (2026-06-11)
+
+- **A — FIXED** (Phase B): `v-for` ancestry now emits a `loop-multiplicity` warning, and an
+  author-bound `:data-testid` is respected (element skipped, never minted beside).
+- **B — FIXED**: the `{component}` id token is slugified.
+- **C — FIXED**: `DEFAULT_CONFIG.skipTags` (`h1`–`h6`, `th`, `label`) skips minting for
+  copy-only presentation tags unless the element carries a `data-tid` or an existing id
+  (sticky ids are still honored, so previously tagged elements are not retired).
+- **D — FIXED**: the CLI picks the adapter from the file set (`.vue` → `VueAdapter`,
+  otherwise HTML; `--adapter` overrides), so `testid tag src --ext .vue` works.
+- **E** still holds; **F** added above.
