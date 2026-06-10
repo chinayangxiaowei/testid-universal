@@ -39,9 +39,11 @@ export class TestIdService {
     const config = this.merge(req.config);
     const prevSnap = await this.storage.loadLatest();
     const prior: PriorEntry[] | undefined = prevSnap
-      ? [...Object.values(prevSnap.entries), ...Object.values(prevSnap.retired ?? {})].map((e) => ({
-          identity: e.identity, fingerprint: e.fingerprint, disambiguator: e.disambiguator ?? '',
-        }))
+      ? [...Object.values(prevSnap.entries), ...Object.values(prevSnap.retired ?? {})]
+          .filter((e) => e.identity != null) // legacy entries without identity can never match
+          .map((e) => ({
+            identity: e.identity, fingerprint: e.fingerprint, disambiguator: e.disambiguator ?? '',
+          }))
       : undefined;
     const { drafts, warnings } = generate(req.nodes, config, prior);
     const { snapshot, overrides } = await reconcile(drafts, this.storage);
