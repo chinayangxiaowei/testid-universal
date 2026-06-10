@@ -15,6 +15,17 @@ describe('shouldTag', () => {
   it('respects ignoreTags', () => {
     expect(shouldTag(node({ tag: 'svg', signals: { aria_label: 'icon' } }), { ...cfg, ignoreTags: ['svg'] })).toBe(false);
   });
+  it('skips copy-only presentation tags (skipTags) by default', () => {
+    expect(shouldTag(node({ tag: 'h1', signals: { text: 'Welcome' } }), cfg)).toBe(false);
+    expect(shouldTag(node({ tag: 'th', signals: { text: 'Name' } }), cfg)).toBe(false);
+    expect(shouldTag(node({ tag: 'label', signals: { text: 'Remember me' } }), cfg)).toBe(false);
+  });
+  it('keeps a skipTags element that carries an explicit key', () => {
+    expect(shouldTag(node({ tag: 'h1', signals: { explicit_key: 'page/title', text: 'Welcome' } }), cfg)).toBe(true);
+  });
+  it('keeps a skipTags element that already has a written id (sticky)', () => {
+    expect(shouldTag(node({ tag: 'h1', signals: { text: 'Welcome' }, existingId: 'x__h1--old' }), cfg)).toBe(true);
+  });
 });
 
 describe('generate', () => {

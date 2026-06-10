@@ -131,7 +131,14 @@ export interface CoreConfig {
   /** Attribute an adapter reads as the explicit stable key (Tier 0). */
   explicitKeyAttribute: string;
   customTagMap: Record<string, CustomTagMapEntry>;
+  /** Tags that are NEVER tagged, no matter what. */
   ignoreTags: string[];
+  /**
+   * Copy-only presentation tags that are skipped when minting UNLESS the element
+   * carries an explicit key (data-tid) or already has a written id (sticky ids are
+   * always honored). Cuts unstable-identity noise on elements nobody locates in e2e.
+   */
+  skipTags: string[];
 }
 
 export const DEFAULT_CONFIG: CoreConfig = {
@@ -140,4 +147,5 @@ export const DEFAULT_CONFIG: CoreConfig = {
   explicitKeyAttribute: 'data-tid',
   customTagMap: {},
   ignoreTags: [],
+  skipTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'th', 'label'],
 };

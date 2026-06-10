@@ -10,6 +10,11 @@ import { hashSymbolSources } from './sourcedeps';
 export function shouldTag(node: ElementNode, config: CoreConfig): boolean {
   const tag = node.tag;
   if (config.ignoreTags.includes(tag) || config.ignoreTags.includes(tag.toLowerCase())) return false;
+  // Copy-only presentation tags are skipped for fresh minting; an explicit key or an
+  // already-written id (sticky) always wins, so nothing previously tagged is retired.
+  if (config.skipTags.includes(tag.toLowerCase()) && !node.existingId && !node.signals.explicit_key) {
+    return false;
+  }
   if (node.existingId) return true;
   const s = node.signals;
   return Object.values(s).some((v) => {
