@@ -7,6 +7,7 @@
  * (remote). The pipeline cannot tell the difference — that is the whole point.
  */
 import { CoreConfig, Warning } from '../core/types';
+import { normalizeSignals, referencedSymbolNames } from '../core';
 import { FrameworkAdapter } from '../adapters/contract';
 import { TestIdTransport } from './transport';
 
@@ -20,7 +21,26 @@ export async function runPipeline(
   opts?: { regenerate?: boolean },
 ): Promise<{ tagged: TaggedFile[]; version: number; overrides: string[]; warnings: Warning[] }> {
   // 1. Parse every file into the shared IR (the only framework-aware step).
-  const parsed = files.flatMap((f) => adapter.parse(f.source, f.file, f.component));
+  const parsed = files.flatMap((f) => {
+    const fileNodes = adapter.parse(f.source, f.file, f.component);
+    // L2 source-deps: resolve each file's referenced symbols once, then attach the
+    // per-node subset. Core picks the names and hashes the text; the adapter only maps
+    // name -> raw definition source. Adapters without the capability skip this.
+    if (adapter.resolveSymbolDefs) {
+      const perNode = fileNodes.map((n) => referencedSymbolNames(normalizeSignals(n.signals)));
+      const all = [...new Set(perNode.flat())].sort();
+      if (all.length) {
+        const resolved = adapter.resolveSymbolDefs(all, f.source, f.file);
+        fileNodes.forEach((n, i) => {
+          if (!perNode[i].length) return;
+          const subset: Record<string, string | null> = {};
+          for (const name of perNode[i]) subset[name] = resolved[name] ?? null;
+          n.symbol_sources = subset;
+        });
+      }
+    }
+    return fileNodes;
+  });
   // regenerate: drop existing ids so every element is freshly minted (and overwritten).
   const nodes = opts?.regenerate ? parsed.map((n) => ({ ...n, existingId: null })) : parsed;
 
