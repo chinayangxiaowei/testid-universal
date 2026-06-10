@@ -21,6 +21,7 @@ export interface RegistryEntry {
   identity: string;
   fingerprint: string;
   disambiguator: string;
+  symbol_defs: Record<string, string>;
   signals: NormalizedSignals;
   source: 'generated' | 'manual' | 'sticky';
   first_seen_version: number;

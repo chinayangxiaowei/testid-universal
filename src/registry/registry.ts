@@ -57,6 +57,7 @@ export async function reconcile(
       identity: d.identity,
       fingerprint: d.fingerprint,
       disambiguator: d.disambiguator,
+      symbol_defs: d.symbol_defs,
       signals: d.signals,
       source,
       first_seen_version: existing?.first_seen_version ?? version,

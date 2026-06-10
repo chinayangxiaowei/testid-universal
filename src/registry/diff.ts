@@ -55,6 +55,15 @@ export function diffSignals(a: NormalizedSignals, b: NormalizedSignals): SignalC
   return changes;
 }
 
+function diffSymbolDefs(a: Record<string, string> | undefined, b: Record<string, string> | undefined): SignalChange[] {
+  const av = a ?? {}, bv = b ?? {};
+  const changes: SignalChange[] = [];
+  for (const name of [...new Set([...Object.keys(av), ...Object.keys(bv)])].sort()) {
+    if (av[name] !== bv[name]) changes.push({ field: `symbol:${name}`, old: av[name] ?? null, new: bv[name] ?? null });
+  }
+  return changes;
+}
+
 export function diff(from: RegistrySnapshot, to: RegistrySnapshot): DiffResult {
   const added: SimpleEntry[] = [];
   const removed: SimpleEntry[] = [];
@@ -65,8 +74,12 @@ export function diff(from: RegistrySnapshot, to: RegistrySnapshot): DiffResult {
   for (const [id, entry] of Object.entries(to.entries)) {
     const prev = from.entries[id];
     if (prev) {
-      if (prev.fingerprint === entry.fingerprint) unchanged++;
-      else modified.push({ id, identity: entry.identity, component: entry.component, changes: diffSignals(prev.signals, entry.signals) });
+      const symbolChanges = diffSymbolDefs(prev.symbol_defs, entry.symbol_defs);
+      if (prev.fingerprint === entry.fingerprint && symbolChanges.length === 0) unchanged++;
+      else modified.push({
+        id, identity: entry.identity, component: entry.component,
+        changes: [...diffSignals(prev.signals, entry.signals), ...symbolChanges],
+      });
     } else if ((entry.generation_history?.length ?? 0) > 1) {
       regenerated.push({ id, identity: entry.identity, component: entry.component });
     } else {

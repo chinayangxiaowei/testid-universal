@@ -61,4 +61,18 @@ describe('diff (exact identity match)', () => {
     expect(d.summary.removed).toBe(1);
     expect(d.removed[0].id).toBe('login__button--save--2');
   });
+
+  it('modified when only a symbol definition changed (fingerprint identical)', () => {
+    const v1 = snapshot(1, { b: entry({ identity: 'x::button::save', fingerprint: 'F', symbol_defs: { saveOrder: 'aaa' } }) });
+    const v2 = snapshot(2, { b: entry({ identity: 'x::button::save', fingerprint: 'F', symbol_defs: { saveOrder: 'bbb' } }) });
+    const d = diff(v1, v2);
+    expect(d.summary.modified).toBe(1);
+    expect(d.modified[0].changes).toContainEqual({ field: 'symbol:saveOrder', old: 'aaa', new: 'bbb' });
+  });
+
+  it('unchanged when fingerprint and symbol_defs both match', () => {
+    const v1 = snapshot(1, { b: entry({ identity: 'x::button::save', fingerprint: 'F', symbol_defs: { saveOrder: 'aaa' } }) });
+    const v2 = snapshot(2, { b: entry({ identity: 'x::button::save', fingerprint: 'F', symbol_defs: { saveOrder: 'aaa' } }) });
+    expect(diff(v1, v2).summary.unchanged).toBe(1);
+  });
 });
