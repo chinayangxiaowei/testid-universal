@@ -143,6 +143,31 @@ describe('generate', () => {
     }
   });
 
+  it('hashes attached symbol sources into the draft', () => {
+    const { drafts } = generate([
+      node({
+        tag: 'button',
+        signals: { event_handlers: { click: 'saveOrder' } },
+        symbol_sources: { saveOrder: 'function saveOrder() { return 1; }' },
+      }),
+    ], cfg);
+    expect(Object.keys(drafts[0].symbol_defs)).toEqual(['saveOrder']);
+    expect(drafts[0].symbol_defs.saveOrder).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it('tracks symbol_defs for sticky elements too (id frozen, deps still tracked)', () => {
+    const { drafts } = generate([
+      node({
+        tag: 'button',
+        signals: { event_handlers: { click: 'saveOrder' } },
+        existingId: 'x__button--save',
+        symbol_sources: { saveOrder: 'function saveOrder() { return 1; }' },
+      }),
+    ], cfg);
+    expect(drafts[0].sticky).toBe(true);
+    expect(Object.keys(drafts[0].symbol_defs)).toEqual(['saveOrder']);
+  });
+
   it('a new group member takes the next free slot without moving incumbents', () => {
     const A = node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Save' } });
     const B = node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Submit' } });

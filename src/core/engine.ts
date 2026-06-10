@@ -5,6 +5,7 @@ import { slugify } from './semantic';
 import { selectIdentityKey, identityOf } from './identity';
 import { fingerprintOf } from './fingerprint';
 import { formatId } from './format';
+import { hashSymbolSources } from './sourcedeps';
 
 export function shouldTag(node: ElementNode, config: CoreConfig): boolean {
   const tag = node.tag;
@@ -91,6 +92,7 @@ export function generate(nodes: ElementNode[], config: CoreConfig, prior?: Prior
       component: p.node.component, tag: p.node.tag, element_type: p.long,
       identity: p.identity, identity_key: slugify(p.identityKey),
       fingerprint: p.fingerprint, signals: sig, loc: p.node.loc,
+      symbol_defs: hashSymbolSources(p.node.symbol_sources ?? {}),
     };
 
     if (p.node.existingId) {
