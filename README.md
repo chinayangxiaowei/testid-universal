@@ -1,5 +1,7 @@
 # testid-universal
 
+English | [简体中文](./README.zh-CN.md)
+
 A framework-agnostic, build-time **TestID engine** that makes `data-testid` a reliable
 bridge for automated-test maintenance: after any code change, it tells you — precisely and
 deterministically — **which e2e test cases need to be rebuilt, modified, or removed**.
