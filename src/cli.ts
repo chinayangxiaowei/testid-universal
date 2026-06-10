@@ -6,16 +6,22 @@
  * JSON files (just like the original tool). Add `--server <url>` and the exact
  * same commands run against a remote backend instead. Nothing else changes.
  *
- *   testid tag <paths...> [--attr data-testid] [--registry DIR] [--server URL] [--dry]
+ *   testid tag <paths...> [--ext .html|.vue] [--adapter html|vue] [--attr data-testid]
+ *              [--registry DIR] [--server URL] [--regenerate] [--dry]
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
  *   testid gen-locators [--target robot|playwright|cypress] [--out DIR] [--registry DIR] [--server URL]
+ *
+ * The adapter is picked from the matched files (.vue -> VueAdapter, else HTML);
+ * --adapter overrides. Mixed .vue/non-.vue runs must be split (or use --adapter).
  */
 import { readFileSync, writeFileSync, statSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 import { createTransport } from './client/transport';
 import { runPipeline } from './client/pipeline';
+import { FrameworkAdapter } from './adapters/contract';
 import { HtmlTemplateAdapter } from './adapters/html';
-import { diff as diffSnapshots, diffToMarkdown } from './registry/diff';
+import { VueAdapter } from './adapters/vue';
+import { diffToMarkdown } from './registry/diff';
 import { LocatorTarget } from './locators';
 
 function parseArgs(argv: string[]) {
@@ -50,12 +56,25 @@ function componentOf(file: string): string {
 async function cmdTag(positional: string[], flags: Record<string, string | boolean>) {
   const registryDir = (flags.registry as string) ?? 'test-artifacts/testids';
   const transport = createTransport({ server: flags.server as string, registryDir });
-  const adapter = new HtmlTemplateAdapter();
   const exts = ((flags.ext as string) ?? '.html').split(',');
-  const files = walk(positional, exts).map((file) => ({
+  const paths = walk(positional, exts);
+  if (paths.length === 0) { console.error('no matching files'); process.exit(2); }
+
+  // Pick the adapter from the matched file set; --adapter overrides.
+  const vueCount = paths.filter((p) => p.endsWith('.vue')).length;
+  const choice = (flags.adapter as string)
+    ?? (vueCount === paths.length ? 'vue' : vueCount === 0 ? 'html' : 'mixed');
+  if (choice !== 'vue' && choice !== 'html') {
+    console.error(choice === 'mixed'
+      ? 'mixed .vue and non-.vue files matched; run them separately or pass --adapter <html|vue>'
+      : `unknown adapter "${choice}" (expected html or vue)`);
+    process.exit(2);
+  }
+  const adapter: FrameworkAdapter = choice === 'vue' ? new VueAdapter() : new HtmlTemplateAdapter();
+
+  const files = paths.map((file) => ({
     file, component: componentOf(file), source: readFileSync(file, 'utf8'),
   }));
-  if (files.length === 0) { console.error('no matching files'); process.exit(2); }
 
   const config = flags.attr ? { attributeName: flags.attr as string } : undefined;
   const result = await runPipeline(adapter, transport, files, config, { regenerate: !!flags.regenerate });
