@@ -12,7 +12,18 @@ export function buildTestMap(
   testFiles: { file: string; source: string }[],
   snapshot: RegistrySnapshot,
 ): Record<string, string[]> {
-  const ids = Object.keys(snapshot.entries);
+  return buildTestMapForIds(testFiles, Object.keys(snapshot.entries));
+}
+
+/**
+ * Id-list variant: lets callers scan for ids that are not all present in any single
+ * snapshot (e.g. the union of a diff's added + removed + modified ids), and works
+ * over either transport since it needs no snapshot loading.
+ */
+export function buildTestMapForIds(
+  testFiles: { file: string; source: string }[],
+  ids: string[],
+): Record<string, string[]> {
   const map: Record<string, string[]> = {};
   for (const { file, source } of testFiles) {
     for (const id of ids) {

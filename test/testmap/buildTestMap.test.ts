@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTestMap } from '../../src/testmap';
+import { buildTestMap, buildTestMapForIds } from '../../src/testmap';
 import { snapshot, entry } from '../helpers';
 
 const snap = snapshot(1, {
@@ -29,5 +29,15 @@ describe('buildTestMap', () => {
       { file: 'c.spec.ts', source: "'login__button--login'" },
     ], snap);
     expect(map['login__button--login'].sort()).toEqual(['a.spec.ts', 'c.spec.ts']);
+  });
+});
+
+describe('buildTestMapForIds', () => {
+  it('maps over an explicit id list (covers ids absent from any one snapshot, e.g. removed)', () => {
+    const map = buildTestMapForIds(
+      [{ file: 'a.spec.ts', source: 'page.getByTestId(testIds.goneButtonX)' }],
+      ['gone__button--x'],
+    );
+    expect(map['gone__button--x']).toEqual(['a.spec.ts']);
   });
 });
