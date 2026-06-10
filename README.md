@@ -1,127 +1,235 @@
 # testid-universal
 
-A framework-agnostic TestID engine **distilled** from the build-time Angular tagger
-idea (spachtholz/TestID-Generator). The original tool's value was never the Angular
-parsing — it was the data flow:
-
-> semantic key → fingerprint → deterministic id → versioned registry → diff → locators
-
-That flow has **nothing to do with any UI framework**. Only two steps are framework-specific:
-turning a template into elements, and writing an attribute back. This project pushes
-those two steps into a thin **adapter** and turns everything else into a shared
-**backend service**, so the same brain serves Angular, Vue, React, or anything that
-renders a DOM.
-
-## The one idea that makes it portable
-
-A single intermediate representation, `ElementNode[]`, is the contract between the
-framework world and the engine world:
+A framework-agnostic, build-time **TestID engine** that makes `data-testid` a reliable
+bridge for automated-test maintenance: after any code change, it tells you — precisely and
+deterministically — **which e2e test cases need to be rebuilt, modified, or removed**.
 
 ```
-Angular/Vue/React template ──[adapter.parse]──▶ ElementNode[] ──▶ ENGINE
-                                                                    │
-   tagged template ◀──[adapter.write]── edits ◀── ids + registry ◀─┘
+RawSignals (per element) → identity + fingerprint → deterministic id
+        → versioned registry → diff → re-test routing (test map + source-dependency map)
 ```
 
-The adapter normalizes each framework's vocabulary (`formControlName`, `v-model`,
-React `name`, `routerLink`/`to`/`href`, …) into **canonical semantic hints**. The
-engine only ever reasons about the canonical names. Vocabulary = adapter; policy = core.
+## The problem
 
-## Layered structure
+`data-testid` is the standard anchor for e2e locators, but hand-managing ids fails in two
+directions:
 
-| Layer | Folder | Framework-aware? | Responsibility |
-| --- | --- | --- | --- |
-| Adapters | `src/adapters` | **Yes (only here)** | `parse()` template → IR, `write()` id back. Vocabulary map. |
-| Core engine | `src/core` | No | key extraction, fingerprint, classification, id format, collision resolution. **Pure functions.** |
-| Registry | `src/registry` | No | versioning, first/last-seen, source, regeneration history, **diff** (rename via fingerprint similarity). Storage-agnostic. |
-| Locators | `src/locators` | No | emit Robot / Playwright / Cypress locators from the registry. |
-| Backend | `src/server` | No | `TestIdService` (transport-agnostic) + a zero-dep `node:http` REST shell. |
-| Client | `src/client` | No | pipeline: adapter → service → write-back. |
+1. **Locator decay.** Ids drift when markup changes (or are duplicated, or missing), so
+   tests silently match the wrong element — or nothing.
+2. **Stale tests with healthy locators.** The id still resolves, but the *behavior behind
+   the element* changed (a handler body, a validator, a bound value). Nothing tells you the
+   test needs to be re-run or re-written.
 
-Dependencies point **downward only**: adapters depend on the contract, the client
-orchestrates, and `core` depends on nothing but Node's `crypto`. The whole thing has
-**zero runtime npm dependencies**.
+Solving only #1 (what most generators do) is necessary but not sufficient: **an id change
+is one signal; a source-dependency change is the complementary trigger.**
 
-## What's agnostic vs. what each framework must supply
+## How it works
 
-**Agnostic (written once, shared by all):** id generation, collision/hash strategy,
-fingerprinting, the registry + versioning, diff/rename detection, locator generation,
-the backend API. ~90% of the code.
+### 1. A closed signal contract (adapters can't lie)
 
-**Per-framework (one small adapter each):**
-- `parse()` — use `@angular/compiler`, `@vue/compiler-sfc`, or `@babel/parser` to walk
-  the template/JSX and emit `ElementNode[]`. See `src/adapters/sketches.ts`.
-- `write()` — inject the attribute (offset splice for HTML-like templates; AST re-print
-  for JSX).
-- a `customTagMap` for the local component library (PrimeNG vs MUI vs Vuetify).
+Each framework adapter parses templates into `ElementNode[]` carrying **`RawSignals`** — a
+closed, tiered schema. Adapters only map framework vocabulary into named slots
+(`formControlName`/`v-model` → `form_control`, `@click` → `event_handlers`, …); the
+priority policy, hashing, and diffing all live in the core and are not adapter-configurable.
 
-A working, dependency-free `HtmlTemplateAdapter` is included and is what the demo uses.
+| Tier | Signals | Role |
+| --- | --- | --- |
+| 0 | `explicit_key` (an authored `data-tid`) | absolute identity anchor |
+| 1 | `form_control`, `name`, `route`, `event_handlers`, `bound_identifiers`, `html_id`, `structural` | **identity** (stable, code-wired) |
+| 2 | `child_shape`, `context`, `semantic_css` | disambiguation only |
+| 3 | `text`, `aria_label`, `placeholder`, `title`, …, `static_attributes` | **fingerprint only** (volatile copy) |
 
-## Two ways to use it — same code, your choice
+### 2. Identity ≠ fingerprint
 
-The engine is a plain library. A **transport** decides whether calls run in-process or
-hit a server, and the pipeline/CLI depend only on that interface:
+- **identity** is the stable matching key, built **only from stable signals** — display
+  copy is ranked last and emits an `unstable-identity` warning when it ends up as the key.
+  Identity is a pure function of the element's *own* signals: adding or editing element B
+  can never move element A's id.
+- **fingerprint** is a rich descriptive signature over **all** signals. It is never used
+  for matching — only to detect `modified` and report *which fields changed*.
+
+### 3. Sticky ids — locators never churn
+
+On re-tag, an element that already carries a written `data-testid` **keeps it verbatim**
+(`source: 'sticky'`). Copy edits, restyles, sibling insertions — nothing moves a written
+id. `--regenerate` (or deleting the attribute) is the only way to re-mint. Freshly minted
+ids are guaranteed unique (group-coherent disambiguation; positional suffixes inherit
+their previous slot via byte-exact fingerprint match so reordering siblings doesn't shift
+incumbents).
+
+Elements inside a loop (`v-for` / `*ngFor`) get a `loop-multiplicity` warning: one static
+id is shared by every rendered instance — bind a per-item id instead
+(`:data-testid="'row-' + item.id"`), which the tagger then **respects and never overwrites**.
+
+### 4. Deterministic diff — no fuzzy matching
+
+Snapshots are versioned in a JSON registry. `diff(v1, v2)` classifies every id exactly:
+`unchanged` / `added` / `removed` / `modified` (with a field-level change list) /
+`regenerated` (an id that disappeared and came back, via tombstoned provenance). There is
+no similarity threshold anywhere — every signal is exact.
+
+### 5. testID → test-case map (fail-closed)
+
+`generateConstants(snapshot)` emits a `testIds` module. Tests import constants instead of
+hardcoding strings, so a removed or renamed id **fails to compile** — never a silent
+runtime mismatch. `buildTestMap(testFiles, snapshot)` scans test sources (constant refs +
+raw id strings) into `id → [test files]`, and `affectedTests(diff, map)` turns a diff into
+a routed action list: **`write-new` / `retire` / `re-test`**.
+
+### 6. testID → source-dependency map (re-test even when the id didn't change)
+
+For each element, the core selects the symbols it directly references (handler names,
+bound-identifier roots, `v-model` targets); the adapter resolves them to their
+**definition source text** (Vue: `<script setup>` top-level declarations via
+`@vue/compiler-sfc`); the core hashes the text (whitespace-insensitive) into
+`symbol_defs`. When a definition body changes — even with the id frozen and the markup
+untouched — the diff reports `modified` with `symbol:<name>`, and the linked tests are
+routed to `re-test`.
+
+**Honest boundary:** only *directly referenced* definitions are tracked. Imports resolve
+to their import statement only; symbol→symbol calls (a handler calling a service) are NOT
+followed. Frameworks/adapters without the capability degrade to name-only tracking.
+Registries created before symbol tracking upgrade with zero noise (first run records the
+baseline).
+
+## Quick start
+
+```bash
+npm install            # zero runtime deps in core
+npm i -D @vue/compiler-sfc   # only if you use the Vue adapter (optional peer dep)
+```
+
+### Tag a Vue project (library)
 
 ```ts
-// EMBEDDED (default): no server, nothing to start. Registry persists as JSON files.
-const transport = new LocalTransport(new JsonFileStorage('./test-artifacts/testids'));
+import {
+  VueAdapter, LocalTransport, JsonFileStorage, runPipeline, diffToMarkdown,
+} from 'testid-universal';
+import { readFileSync, writeFileSync } from 'node:fs';
 
-// REMOTE: point at a backend. Every downstream call is identical.
-const transport = new HttpTransport('http://localhost:7337');
+const transport = new LocalTransport(new JsonFileStorage('.testids'));
+const adapter = new VueAdapter(); // or new VueAdapter(VUETIFY_TAG_MAP)
+
+const files = ['src/pages/LoginPage.vue'].map((file) => ({
+  file,
+  component: file.split('/').pop()!.replace('.vue', ''),
+  source: readFileSync(file, 'utf8'),
+}));
+
+const result = await runPipeline(adapter, transport, files);
+for (const t of result.tagged) if (t.after !== t.before) writeFileSync(t.file, t.after);
+
+console.log(`registry version ${result.version}`);
+for (const w of result.warnings) console.warn(w.message); // unstable-identity / loop-multiplicity
+
+// later, after edits + another runPipeline:
+const d = await transport.diff(1, 2);
+console.log(diffToMarkdown(d!));
 ```
 
-Same idea on the CLI — embedded by default, `--server` to opt into the service:
+Re-running is **idempotent and sticky**: tagged files are not rewritten, written ids are
+never recomputed. Pass `runPipeline(..., { regenerate: true })` to force a re-mint.
+
+### Route the diff to your tests
+
+```ts
+import { generateConstants, buildTestMap, affectedTests, affectedTestsToMarkdown } from 'testid-universal';
+
+// 1. emit constants; commit the file; tests import { testIds } from it
+writeFileSync('e2e/testids.generated.ts', generateConstants(snapshot));
+
+// 2. map ids to the tests that reference them
+const map = buildTestMap(testFiles /* {file, source}[] */, snapshot);
+
+// 3. after a diff: which tests to write / retire / re-test
+console.log(affectedTestsToMarkdown(affectedTests(diff, map)));
+```
+
+A `modified` id (markup field OR `symbol:<name>` change) routes its tests to `re-test`;
+`removed` → `retire` (and the vanished constant breaks compilation); `added` → `write-new`.
+
+### CLI (embedded; HTML-like templates)
 
 ```bash
-# embedded — like a normal build tool, zero infrastructure
-testid tag src/app --registry ./test-artifacts/testids
-testid diff 1 2
-testid gen-locators --target playwright --out tests/locators
-
-# centralized — identical commands, add one flag
-testid tag src/app --server http://localhost:7337
-testid gen-locators --target playwright --server http://localhost:7337
+npm run cli -- tag src/app --registry ./reg [--ext .html] [--regenerate] [--dry]
+npm run cli -- diff 1 2 --registry ./reg
+npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
+npm run serve            # OPTIONAL node:http backend on :7337; add --server <url> to any command
 ```
 
-So: **library/CLI when you just want it to work; a service when a team wants one
-shared testid authority.** You never rewrite calling code to move between them.
+The CLI currently instantiates the HTML adapter only — for `.vue` projects use the library
+(as above). Embedded and remote are interchangeable: the same `TestIdService` sits behind
+a `LocalTransport` (in-process) or `HttpTransport` (REST), and calling code is identical.
 
-## Why a backend at all
+### Locator generation
 
-Making the engine + registry a *service* (the `HttpTransport` side) turns testids into
-a centralized authority: any client in any language can `POST /tag` a list of
-`ElementNode`s and get back assigned ids, edits, and a new registry version. Point the
-storage at Postgres and it becomes multi-repo / multi-team. But that is strictly
-opt-in — the embedded mode covers the common case with no moving parts.
+`gen-locators` / `generateLocators(snapshot, target)` emit ready-to-use locator files for
+**Robot Framework**, **Playwright**, or **Cypress** (selector convention
+`[data-testid="<id>"]`).
 
-### REST API
+## What a real lifecycle looks like
 
-```
-POST /tag                 { nodes, config? }                -> { version, assignments, edits, overrides }
-GET  /registry/latest                                       -> RegistrySnapshot
-GET  /diff?from=1&to=2&threshold=0.8                        -> DiffResult
-GET  /locators?target=robot|playwright|cypress&attr=...     -> { [file]: content }
-```
+| Edit | Result |
+| --- | --- |
+| First tag | ids minted from stable signals (`login__input--email`, `login__button--onsubmit`) |
+| Change button copy "Sign in" → "Log in" | id frozen; diff: `modified { text }` — re-test only if you assert the label |
+| Add a field | diff: `1 added`, nothing else moves |
+| Edit `onSubmit`'s **function body** (template untouched) | ids frozen, 0 files rewritten; diff: `modified { symbol:onSubmit }` on exactly the form + button wired to it → their tests are routed to re-test |
+| Delete an element | diff: `removed`; its constant vanishes → referencing tests fail to compile; report says `retire` |
+| Element with no stable signal (`<h1>Title</h1>`) | tagged, but warned: add a `data-tid` if you need it stable |
+| Element inside `v-for` | `loop-multiplicity` warning + the documented fix; a bound `:data-testid` is respected, never overwritten |
 
-## Run it
+## Architecture
+
+| Layer | Files | Framework-aware? |
+| --- | --- | --- |
+| Adapters | `src/adapters/{contract,html,vue,sketches}.ts` | **yes — only here** |
+| Core engine | `src/core/{types,signals,identity,fingerprint,classify,format,sourcedeps,engine}.ts` | no (pure) |
+| Registry | `src/registry/{storage,registry,diff}.ts` | no |
+| Locators & constants | `src/locators/` | no |
+| Test map | `src/testmap/` | no |
+| Backend | `src/server/` (`TestIdService` + `node:http` shell) | no |
+| Client | `src/client/{transport,pipeline}.ts` | no |
+| CLI | `src/cli.ts` | no |
+
+Dependencies point downward; the core depends on nothing but `node:crypto`. A new
+framework = one adapter implementing `parse`, `write`, and optionally
+`resolveSymbolDefs` (the L2 capability). Adapters today: **Vue** (AST-backed, full
+capability) and **HTML** (regex scanner, demo-grade); Angular/React exist as sketches.
+
+## Invariants
+
+1. Identity excludes display copy; copy as key is a warned last resort.
+2. `static_attributes` feeds the fingerprint only — never identity.
+3. An id is a pure function of the element's own signals; no randomness, no counters.
+4. Every emitted id is unique within a parse.
+5. Writes are idempotent (existing testids are stripped before re-adding).
+6. A written id is sticky; only `--regenerate` re-mints.
+7. Adapters fill signal slots and resolve definition *text*; policy, hashing, and diffing
+   are core-owned.
+
+## Known limitations
+
+- Truly identical signal-less siblings disambiguate by document order (information-
+  theoretically unavoidable) — the warning recommends an explicit `data-tid`.
+- Source-dependency tracking follows **direct references only** (no call graph); Vue
+  options API / plain `<script>` resolve name-only.
+- `JsonFileStorage` is last-write-wins (no locking/auth) — fine embedded, use a
+  transactional storage for a shared service.
+- The HTML adapter is a regex scanner; Angular/React adapters are not yet implemented.
+
+## Development
 
 ```bash
-npm run demo     # end-to-end EMBEDDED: tag v1, edit, tag v2, diff (rename+modify), locators, determinism check
-npm run cli -- tag <paths> --registry ./reg    # the CLI, fully embedded (no server)
-npm run serve    # OPTIONAL: boot the backend on :7337 for --server mode
+npm test            # vitest (107 tests)
+npm run typecheck   # tsc --noEmit
+npm run build       # tsc
+npm run demo        # HTML end-to-end demo
+npm run demo:vue    # .vue → tag → diff → Playwright locators
 ```
 
-Re-running `tag` on an already-tagged file is idempotent — existing ids are rewritten
-in place, never duplicated.
-
-## Extending
-
-- **New framework:** implement `FrameworkAdapter` (`parse` + `write`). Nothing else changes.
-- **New test stack:** add one function in `src/locators`.
-- **New storage:** implement `RegistryStorage` (in-memory and JSON-file included).
-
-## Relationship to the original
-
-This is a clean-room *distillation of the concept*, not a fork: the determinism model,
-the fingerprint-vs-id split, the versioned registry, and the diff categories are taken
-as design inspiration; the code here is independent and framework-neutral.
+Design docs live in `docs/superpowers/specs/` (identity model; sticky ids + dual-map);
+empirical findings in `docs/findings/`. The project began as a clean-room distillation of
+the build-time Angular tagger idea (`spachtholz/TestID-Generator`) and has since diverged:
+sticky ids, exact-identity diffing, the fail-closed test map, and definition-level source
+tracking are original to this codebase.
