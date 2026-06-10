@@ -140,16 +140,18 @@ console.log(affectedTestsToMarkdown(affectedTests(diff, map)));
 `modified` 的 id(标记字段或 `symbol:<name>` 变更)→ 其测试路由为 `re-test`;
 `removed` → `retire`(且消失的常量直接让编译失败);`added` → `write-new`。
 
-### CLI(嵌入式;面向 HTML 类模板)
+### CLI(嵌入式)
 
 ```bash
-npm run cli -- tag src/app --registry ./reg [--ext .html] [--regenerate] [--dry]
+npm run cli -- tag src/app --registry ./reg                  # HTML 类模板(默认 --ext .html)
+npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFC(自动选用 VueAdapter)
 npm run cli -- diff 1 2 --registry ./reg
 npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
 npm run serve            # 可选:在 :7337 启动 node:http 后端;任意命令加 --server <url> 即切远程
 ```
 
-CLI 目前只内置 HTML adapter——`.vue` 项目请用库方式(见上)。嵌入式与远程可互换:
+adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 HTML);
+`--adapter <html|vue>` 可覆盖;混合两类文件的运行会被明确报错拒绝。嵌入式与远程可互换:
 同一个 `TestIdService` 背后,`LocalTransport`(进程内)或 `HttpTransport`(REST)
 任选其一,调用代码完全一致。
 
@@ -168,7 +170,8 @@ CLI 目前只内置 HTML adapter——`.vue` 项目请用库方式(见上)。嵌
 | 新增一个字段 | diff:`1 added`,其余一切不动 |
 | 只改 `onSubmit` 的**函数体**(模板未动) | id 全冻结、0 文件重写;diff:恰好接线到它的 form + button 报 `modified { symbol:onSubmit }` → 其用例路由为重测 |
 | 删除一个元素 | diff:`removed`;其常量消失 → 引用它的测试编译失败;报告给出 `retire` |
-| 无任何稳定信号的元素(`<h1>Title</h1>`) | 照常打标,但警告:如需稳定请加 `data-tid` |
+| 无稳定信号的交互元素(`<button>OK</button>`) | 照常打标,但警告:如需稳定请加 `data-tid` |
+| 纯文案展示标签(`h1`–`h6`、`th`、`label`) | 默认跳过(`skipTags`)——加 `data-tid` 可选入;已写入的 id 仍 sticky 保留 |
 | `v-for` 内的元素 | `loop-multiplicity` 警告 + 修复建议;绑定式 `:data-testid` 会被尊重、永不覆盖 |
 
 ## 架构

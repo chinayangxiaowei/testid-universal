@@ -150,18 +150,20 @@ console.log(affectedTestsToMarkdown(affectedTests(diff, map)));
 A `modified` id (markup field OR `symbol:<name>` change) routes its tests to `re-test`;
 `removed` → `retire` (and the vanished constant breaks compilation); `added` → `write-new`.
 
-### CLI (embedded; HTML-like templates)
+### CLI (embedded)
 
 ```bash
-npm run cli -- tag src/app --registry ./reg [--ext .html] [--regenerate] [--dry]
+npm run cli -- tag src/app --registry ./reg                  # HTML-like templates (default --ext .html)
+npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFCs (VueAdapter picked automatically)
 npm run cli -- diff 1 2 --registry ./reg
 npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
 npm run serve            # OPTIONAL node:http backend on :7337; add --server <url> to any command
 ```
 
-The CLI currently instantiates the HTML adapter only — for `.vue` projects use the library
-(as above). Embedded and remote are interchangeable: the same `TestIdService` sits behind
-a `LocalTransport` (in-process) or `HttpTransport` (REST), and calling code is identical.
+The adapter is picked from the matched files (`.vue` → `VueAdapter`, otherwise HTML);
+`--adapter <html|vue>` overrides, and mixed runs are rejected with a clear error. Embedded
+and remote are interchangeable: the same `TestIdService` sits behind a `LocalTransport`
+(in-process) or `HttpTransport` (REST), and calling code is identical.
 
 ### Locator generation
 
@@ -178,7 +180,8 @@ a `LocalTransport` (in-process) or `HttpTransport` (REST), and calling code is i
 | Add a field | diff: `1 added`, nothing else moves |
 | Edit `onSubmit`'s **function body** (template untouched) | ids frozen, 0 files rewritten; diff: `modified { symbol:onSubmit }` on exactly the form + button wired to it → their tests are routed to re-test |
 | Delete an element | diff: `removed`; its constant vanishes → referencing tests fail to compile; report says `retire` |
-| Element with no stable signal (`<h1>Title</h1>`) | tagged, but warned: add a `data-tid` if you need it stable |
+| Interactive element with no stable signal (`<button>OK</button>`) | tagged, but warned: add a `data-tid` if you need it stable |
+| Copy-only presentation tag (`h1`–`h6`, `th`, `label`) | skipped by default (`skipTags`) — opt in with a `data-tid`; already-written ids stay sticky |
 | Element inside `v-for` | `loop-multiplicity` warning + the documented fix; a bound `:data-testid` is respected, never overwritten |
 
 ## Architecture
