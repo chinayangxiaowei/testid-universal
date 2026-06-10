@@ -102,8 +102,30 @@ export class JsonFileStorage implements RegistryStorage {
   }
   async save(snapshot: RegistrySnapshot): Promise<void> {
     mkdirSync(this.dir, { recursive: true });
-    const json = JSON.stringify(snapshot, null, 2);
+    const json = canonicalStringify(snapshot);
     writeFileSync(this.versionFile(snapshot.version), json);
     writeFileSync(this.latestFile(), json);
   }
+}
+
+/**
+ * JSON.stringify with object keys sorted at every level, so identical content
+ * always serializes to identical bytes — registry files in version control diff
+ * cleanly with no key-order churn. Array order is preserved (it is meaningful,
+ * e.g. generation_history).
+ */
+export function canonicalStringify(value: unknown, space = 2): string {
+  return JSON.stringify(sortKeysDeep(value), null, space);
+}
+
+function sortKeysDeep(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortKeysDeep);
+  if (v !== null && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+      out[k] = sortKeysDeep((v as Record<string, unknown>)[k]);
+    }
+    return out;
+  }
+  return v;
 }
