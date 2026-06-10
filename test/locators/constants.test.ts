@@ -29,4 +29,15 @@ describe('constNameForId', () => {
   it('is a stable camelCase identifier derived from the id', () => {
     expect(constNameForId('login__button--login')).toBe('loginButtonLogin');
   });
+
+  it('prefixes tid when the name would start with a digit (valid TS identifier)', () => {
+    expect(constNameForId('1page__input--email')).toBe('tid1pageInputEmail');
+  });
+
+  it('generateConstants output stays a valid identifier for leading-digit ids', () => {
+    const snap = snapshot(1, {
+      '1page__input--email': entry({ fingerprint: 'F', identity: '1page::input::email' }),
+    });
+    expect(generateConstants(snap)).toContain("tid1pageInputEmail: '1page__input--email',");
+  });
 });

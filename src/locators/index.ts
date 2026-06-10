@@ -22,9 +22,11 @@ function constName(id: string): string {
 function camelName(id: string): string {
   const parts = id.split(/[^a-zA-Z0-9]+/).filter(Boolean);
   if (parts.length === 0) return 'el';
-  return parts
+  const name = parts
     .map((p, i) => (i === 0 ? p.toLowerCase() : p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()))
     .join('');
+  // A leading digit would make the emitted constant an invalid identifier.
+  return /^[0-9]/.test(name) ? `tid${name}` : name;
 }
 
 function sortedIds(snapshot: RegistrySnapshot): string[] {
