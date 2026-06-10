@@ -169,4 +169,16 @@ function saveOrder() {
     const noScript = '<template><button @click="go">Go</button></template>';
     expect(adapter.resolveSymbolDefs!(['go'], noScript, 'Y.vue')).toEqual({ go: null });
   });
+
+  it('resolves export-ed declarations (export function / export const)', () => {
+    const sfc = `<template><button @click="saveOrder">S</button></template>
+<script setup>
+export const limit = 5;
+export function saveOrder() { return limit; }
+</script>
+`;
+    const defs = adapter.resolveSymbolDefs!(['saveOrder', 'limit'], sfc, 'E.vue');
+    expect(defs.saveOrder).toContain('export function saveOrder()');
+    expect(defs.limit).toBe('export const limit = 5;');
+  });
 });

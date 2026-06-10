@@ -172,20 +172,34 @@ export class VueAdapter implements FrameworkAdapter {
     try {
       ast = sfc.compileScript(descriptor, { id: file }).scriptSetupAst;
     } catch {
-      return out; // unparsable script: resolve nothing rather than something wrong
+      // compileScript rejects some valid-JS constructs (e.g. top-level `export` in
+      // <script setup>). Fall through to the @babel/parser fallback below.
+    }
+    const content: string = descriptor.scriptSetup.content;
+    // When compileScript did not produce an AST, parse the raw script content
+    // directly with @babel/parser — the same underlying parser @vue/compiler-sfc uses.
+    if (!ast) {
+      try {
+        const bp = require('@babel/parser') as { parse: (src: string, opts?: any) => any };
+        const parsed = bp.parse(content, { sourceType: 'module', plugins: ['typescript'] });
+        ast = parsed.program?.body ?? [];
+      } catch {
+        return out; // unparsable script: resolve nothing rather than something wrong
+      }
     }
     if (!ast) return out;
-    const content: string = descriptor.scriptSetup.content;
     const slice = (node: any) => content.slice(node.start, node.end);
     for (const node of ast) {
-      if (node.type === 'FunctionDeclaration' && node.id && names.includes(node.id.name)) {
-        out[node.id.name] = slice(node);
-      } else if (node.type === 'VariableDeclaration') {
-        for (const d of node.declarations) {
+      // export function f() {} / export const x = ... wrap the declaration node.
+      const decl = node.type === 'ExportNamedDeclaration' && node.declaration ? node.declaration : node;
+      if (decl.type === 'FunctionDeclaration' && decl.id && names.includes(decl.id.name)) {
+        out[decl.id.name] = slice(node);
+      } else if (decl.type === 'VariableDeclaration') {
+        for (const d of decl.declarations) {
           if (d.id?.type === 'Identifier' && names.includes(d.id.name)) out[d.id.name] = slice(node);
         }
-      } else if (node.type === 'ImportDeclaration') {
-        for (const s of node.specifiers ?? []) {
+      } else if (decl.type === 'ImportDeclaration') {
+        for (const s of decl.specifiers ?? []) {
           if (names.includes(s.local?.name)) out[s.local.name] = slice(node);
         }
       }

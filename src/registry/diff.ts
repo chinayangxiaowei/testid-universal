@@ -74,7 +74,9 @@ export function diff(from: RegistrySnapshot, to: RegistrySnapshot): DiffResult {
   for (const [id, entry] of Object.entries(to.entries)) {
     const prev = from.entries[id];
     if (prev) {
-      const symbolChanges = diffSymbolDefs(prev.symbol_defs, entry.symbol_defs);
+      // A pre-upgrade entry has no symbol_defs baseline; with nothing to compare,
+      // emitting changes would be pure migration noise — the first run records the baseline.
+      const symbolChanges = prev.symbol_defs === undefined ? [] : diffSymbolDefs(prev.symbol_defs, entry.symbol_defs);
       if (prev.fingerprint === entry.fingerprint && symbolChanges.length === 0) unchanged++;
       else modified.push({
         id, identity: entry.identity, component: entry.component,

@@ -75,4 +75,12 @@ describe('diff (exact identity match)', () => {
     const v2 = snapshot(2, { b: entry({ identity: 'x::button::save', fingerprint: 'F', symbol_defs: { saveOrder: 'aaa' } }) });
     expect(diff(v1, v2).summary.unchanged).toBe(1);
   });
+
+  it('stays unchanged when the previous entry predates symbol tracking (no baseline)', () => {
+    const prev = entry({ identity: 'x::button::save', fingerprint: 'F' });
+    delete (prev as any).symbol_defs; // simulate a pre-upgrade registry entry
+    const v1 = snapshot(1, { b: prev });
+    const v2 = snapshot(2, { b: entry({ identity: 'x::button::save', fingerprint: 'F', symbol_defs: { saveOrder: 'h1' } }) });
+    expect(diff(v1, v2).summary.unchanged).toBe(1);
+  });
 });
