@@ -145,10 +145,18 @@ console.log(affectedTestsToMarkdown(affectedTests(diff, map)));
 ```bash
 npm run cli -- tag src/app --registry ./reg                  # HTML 类模板(默认 --ext .html)
 npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFC(自动选用 VueAdapter)
+npm run cli -- tag src --ext .vue --check                    # CI 闸门:不写盘,需要打标则 exit 1
 npm run cli -- diff 1 2 --registry ./reg
 npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
+npm run cli -- gen-constants --out e2e/testids.generated.ts --registry ./reg
+npm run cli -- affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
 npm run serve            # 可选:在 :7337 启动 node:http 后端;任意命令加 --server <url> 即切远程
 ```
+
+`affected` 打印 `write-new` / `retire` / `re-test` 报告;加 `--out-list` 会产出可直接喂给
+测试运行器的文件清单:`npx playwright test $(cat retest.txt)`。完整的 CI 配方
+(闸门、选择性执行、全量兜底规则)见
+`docs/superpowers/specs/2026-06-11-ci-integration-design.md`。
 
 adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 HTML);
 `--adapter <html|vue>` 可覆盖;混合两类文件的运行会被明确报错拒绝。嵌入式与远程可互换:

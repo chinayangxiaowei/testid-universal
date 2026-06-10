@@ -155,10 +155,18 @@ A `modified` id (markup field OR `symbol:<name>` change) routes its tests to `re
 ```bash
 npm run cli -- tag src/app --registry ./reg                  # HTML-like templates (default --ext .html)
 npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFCs (VueAdapter picked automatically)
+npm run cli -- tag src --ext .vue --check                    # CI gate: writes nothing, exit 1 if tagging is needed
 npm run cli -- diff 1 2 --registry ./reg
 npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
+npm run cli -- gen-constants --out e2e/testids.generated.ts --registry ./reg
+npm run cli -- affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
 npm run serve            # OPTIONAL node:http backend on :7337; add --server <url> to any command
 ```
+
+`affected` prints the `write-new` / `retire` / `re-test` report and (with `--out-list`)
+emits the file list to feed straight into the runner: `npx playwright test $(cat retest.txt)`.
+The full CI recipe (gates, selective execution, the full-run fallback rule) is in
+`docs/superpowers/specs/2026-06-11-ci-integration-design.md`.
 
 The adapter is picked from the matched files (`.vue` → `VueAdapter`, otherwise HTML);
 `--adapter <html|vue>` overrides, and mixed runs are rejected with a clear error. Embedded
