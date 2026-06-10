@@ -127,17 +127,22 @@ export class VueAdapter implements FrameworkAdapter {
       const hasFor = (node.props ?? []).some((p) => p.type === PROP_DIRECTIVE && p.name === 'for');
       const loop = inLoop || hasFor;
       if (node.type === NODE_ELEMENT && node.tag) {
-        const attrs = readProps(node).attrs;
-        const start = node.loc.start.offset;
-        const tagEnd = source.indexOf('>', start);
-        nodes.push({
-          component,
-          tag: node.tag,
-          signals: normalize(node),
-          existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
-          loc: { file, start, end: tagEnd },
-          inLoop: loop,
-        });
+        const { attrs, bound } = readProps(node);
+        // An author-bound testid (e.g. :data-testid="'row-' + u.id") is the correct
+        // per-instance fix for loops; respect it: never mint a static id next to it.
+        const hasBoundTestid = bound['data-testid'] != null || bound['data-cy'] != null;
+        if (!hasBoundTestid) {
+          const start = node.loc.start.offset;
+          const tagEnd = source.indexOf('>', start);
+          nodes.push({
+            component,
+            tag: node.tag,
+            signals: normalize(node),
+            existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
+            loc: { file, start, end: tagEnd },
+            inLoop: loop,
+          });
+        }
       }
       for (const child of node.children ?? []) visit(child, loop);
     };

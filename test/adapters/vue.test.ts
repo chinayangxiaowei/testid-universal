@@ -97,3 +97,32 @@ function pick(x) { void x; }
     expect(by('ul').inLoop ?? false).toBe(false);
   });
 });
+
+describe('VueAdapter.parse bound testid', () => {
+  const SFC = `<template>
+  <ul>
+    <li v-for="u in users" :key="u.id" :data-testid="'user-row-' + u.id">
+      <button @click="edit(u)" :data-testid="'user-edit-' + u.id">Edit</button>
+      <button @click="remove(u)">Delete</button>
+    </li>
+  </ul>
+</template>
+
+<script setup>
+function edit(u) { void u; }
+function remove(u) { void u; }
+</script>
+`;
+  const nodes = new VueAdapter().parse(SFC, 'List.vue', 'list');
+
+  it('skips elements that already carry a bound :data-testid', () => {
+    expect(nodes.some((n) => n.tag === 'li')).toBe(false);
+    expect(nodes.filter((n) => n.tag === 'button')).toHaveLength(1); // only the unbound Delete button
+  });
+
+  it('still visits descendants of a skipped element', () => {
+    const del = nodes.find((n) => n.tag === 'button')!;
+    expect(del.signals.event_handlers).toMatchObject({ click: 'remove' });
+    expect(del.inLoop).toBe(true);
+  });
+});
