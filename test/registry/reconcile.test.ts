@@ -102,4 +102,15 @@ describe('reconcile', () => {
     expect(d.summary.added).toBe(0);
     expect(d.regenerated.map((r) => r.id)).toContain('login__input--email');
   });
+
+  it('persists the draft disambiguator on the entry', async () => {
+    const storage = new InMemoryStorage();
+    const two = [
+      node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Save' } }),
+      node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Submit' } }),
+    ];
+    const { snapshot: s } = await reconcile(draftsFor(...two), storage, NOW);
+    const entries = Object.values(s.entries);
+    expect(entries.map((e) => e.disambiguator).sort()).toEqual(['', '2']);
+  });
 });

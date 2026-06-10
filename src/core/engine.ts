@@ -1,4 +1,4 @@
-import { ElementNode, EntryDraft, CoreConfig, Warning } from './types';
+import { ElementNode, EntryDraft, CoreConfig, Warning, PriorEntry } from './types';
 import { normalizeSignals } from './signals';
 import { classify } from './classify';
 import { slugify } from './semantic';
@@ -31,7 +31,7 @@ interface Pre {
   identity: string;
 }
 
-export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResult {
+export function generate(nodes: ElementNode[], config: CoreConfig, prior?: PriorEntry[]): GenerateResult {
   const warnings: Warning[] = [];
   const pre: Pre[] = [];
 
@@ -71,6 +71,19 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
     freshByIdentity.get(p.identity)!.push(p);
   }
 
+  // Build a prior-entry index keyed by identity for registry-stable slot inheritance.
+  const priorByIdentity = new Map<string, PriorEntry[]>();
+  for (const e of prior ?? []) {
+    if (!priorByIdentity.has(e.identity)) priorByIdentity.set(e.identity, []);
+    priorByIdentity.get(e.identity)!.push(e);
+  }
+
+  // Pre-compute disambiguator slots for every multi-member fresh group.
+  const slots = new Map<Pre, string>();
+  for (const [identity, group] of freshByIdentity) {
+    if (group.length > 1) assignGroupSlots(group, priorByIdentity.get(identity) ?? [], warnings, slots);
+  }
+
   const drafts: EntryDraft[] = [];
   for (const p of pre) {
     const sig = normalizeSignals(p.node.signals);
@@ -81,12 +94,11 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
     };
 
     if (p.node.existingId) {
-      drafts.push({ id: p.node.existingId, sticky: true, ...common });
+      drafts.push({ id: p.node.existingId, sticky: true, disambiguator: '', ...common });
       continue;
     }
 
-    const group = freshByIdentity.get(p.identity)!;
-    const disambiguator = group.length > 1 ? disambiguate(p, group, warnings) : '';
+    const disambiguator = slots.get(p) ?? '';
     const render = (dis: string) => formatId(config.idFormat, {
       component: slugify(p.node.component), element: slugify(p.short),
       key: slugify(p.identityKey), tag: p.node.tag, disambiguator: dis,
@@ -95,18 +107,19 @@ export function generate(nodes: ElementNode[], config: CoreConfig): GenerateResu
     // Global uniqueness: never reuse an id already taken (sticky or an earlier mint).
     for (let n = 2; taken.has(id); n++) id = render(disambiguator ? `${disambiguator}-${n}` : String(n));
     taken.add(id);
-    drafts.push({ id, sticky: false, ...common });
+    drafts.push({ id, sticky: false, disambiguator, ...common });
   }
   return { drafts, warnings };
 }
 
 /**
- * Group-coherent disambiguation. If EVERY member of the same-identity group has a
- * distinct, non-empty stable-token slug, use that slug for all members; otherwise
- * assign positional indices to all members (with a warning). Keeping the whole group
- * on one scheme guarantees a stable-token slug can never collide with a positional index.
+ * Group-coherent slot assignment. Stable-token path first (all members carry
+ * distinct non-empty stable-token slugs). Otherwise positional — but registry-
+ * stable: a member whose fingerprint matches a prior same-identity entry
+ * byte-exact inherits that entry's old suffix, so reordering/inserting siblings
+ * never shifts an incumbent. Only genuinely new members take the next free slot.
  */
-function disambiguate(p: Pre, group: Pre[], warnings: Warning[]): string {
+function assignGroupSlots(group: Pre[], prior: PriorEntry[], warnings: Warning[], out: Map<Pre, string>): void {
   const slugTokens = group.map((g) => {
     const gs = normalizeSignals(g.node.signals);
     const tok = gs.html_id ?? gs.route ?? Object.values(gs.bound_identifiers)[0] ?? null;
@@ -114,12 +127,30 @@ function disambiguate(p: Pre, group: Pre[], warnings: Warning[]): string {
   });
   const allDistinctPresent = slugTokens.every((t): t is string => !!t) && new Set(slugTokens).size === group.length;
   if (allDistinctPresent) {
-    return slugTokens[group.indexOf(p)]!;
+    group.forEach((g, i) => out.set(g, slugTokens[i]!));
+    return;
   }
-  const index = group.indexOf(p);
-  warnings.push({
-    code: 'positional-disambiguator', element_type: p.long, identity: p.identity,
-    message: `${p.identity} has ${group.length} indistinguishable elements; using positional index ${index + 1}. Add an explicit key for stable ids.`,
-  });
-  return index === 0 ? '' : String(index + 1);
+  // Sort prior by disambiguator: '' first, then numeric ascending, then lexicographic.
+  prior = [...prior].sort((a, b) => (a.disambiguator === '' ? -1 : b.disambiguator === '' ? 1 : a.disambiguator.localeCompare(b.disambiguator, undefined, { numeric: true })));
+  const claimed = new Set<string>();
+  const unassigned: Pre[] = [];
+  // Phase 1: inherit a prior slot whose fingerprint matches byte-exact (lowest unclaimed first).
+  for (const g of group) {
+    const match = prior.find((e) => e.fingerprint === g.fingerprint && !claimed.has(e.disambiguator));
+    if (match) { out.set(g, match.disambiguator); claimed.add(match.disambiguator); }
+    else unassigned.push(g);
+  }
+  // Phase 2: new members take the next free positional slot ('' is slot 1).
+  let n = 1;
+  for (const g of unassigned) {
+    let value = n === 1 ? '' : String(n);
+    while (claimed.has(value)) { n++; value = n === 1 ? '' : String(n); }
+    out.set(g, value); claimed.add(value); n++;
+  }
+  for (const g of group) {
+    warnings.push({
+      code: 'positional-disambiguator', element_type: g.long, identity: g.identity,
+      message: `${g.identity} has ${group.length} indistinguishable elements; using positional slots. Add an explicit key for fully stable ids.`,
+    });
+  }
 }

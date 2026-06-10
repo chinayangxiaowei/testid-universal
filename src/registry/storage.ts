@@ -20,6 +20,7 @@ export interface RegistryEntry {
   element_type: string;
   identity: string;
   fingerprint: string;
+  disambiguator: string;
   signals: NormalizedSignals;
   source: 'generated' | 'manual' | 'sticky';
   first_seen_version: number;

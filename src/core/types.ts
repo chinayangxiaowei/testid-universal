@@ -105,9 +105,14 @@ export interface EntryDraft {
   fingerprint: string;    // rich descriptive
   /** True when this id was taken verbatim from an already-written attribute (not minted). */
   sticky: boolean;
+  /** Positional or stable-token disambiguator suffix; '' when none. */
+  disambiguator: string;
   signals: NormalizedSignals;
   loc?: SourceLoc;
 }
+
+/** Minimal prior-registry view the engine needs for registry-stable disambiguation. */
+export interface PriorEntry { identity: string; fingerprint: string; disambiguator: string }
 
 export interface CustomTagMapEntry { short: string; long: string; }
 

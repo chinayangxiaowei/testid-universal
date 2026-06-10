@@ -14,6 +14,7 @@ export function entry(partial: Partial<RegistryEntry> & { fingerprint: string })
     tag: 'input',
     element_type: 'native_input_text',
     identity: 'login::input::x',
+    disambiguator: '',
     signals: normalizeSignals({}),
     source: 'generated',
     first_seen_version: 1,

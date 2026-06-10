@@ -9,7 +9,7 @@
  * Swap the storage for Postgres/Redis and this same service becomes a multi-repo,
  * multi-team testid authority.
  */
-import { ElementNode, CoreConfig, DEFAULT_CONFIG, generate, Warning } from '../core';
+import { ElementNode, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning } from '../core';
 import { RegistryStorage, RegistrySnapshot, reconcile, diff, DiffResult, generateLocatorsSafe } from './_reexport';
 
 export interface TagRequest {
@@ -37,7 +37,13 @@ export class TestIdService {
   /** The main entry point: accept IR, assign ids, persist a new registry version, return edits. */
   async tag(req: TagRequest): Promise<TagResponse> {
     const config = this.merge(req.config);
-    const { drafts, warnings } = generate(req.nodes, config);
+    const prevSnap = await this.storage.loadLatest();
+    const prior: PriorEntry[] | undefined = prevSnap
+      ? [...Object.values(prevSnap.entries), ...Object.values(prevSnap.retired ?? {})].map((e) => ({
+          identity: e.identity, fingerprint: e.fingerprint, disambiguator: e.disambiguator ?? '',
+        }))
+      : undefined;
+    const { drafts, warnings } = generate(req.nodes, config, prior);
     const { snapshot, overrides } = await reconcile(drafts, this.storage);
 
     const edits: Edit[] = drafts

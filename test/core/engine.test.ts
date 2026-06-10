@@ -129,4 +129,30 @@ describe('generate', () => {
     expect(drafts[0].id).toBe('loginpage__input--email');
     expect(drafts[0].identity).toBe('loginpage::input::email');
   });
+
+  it('keeps positional slots stable across reordering when a prior registry is given', () => {
+    // Same identity (key from the click handler); fingerprints differ by text.
+    const A = node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Save' } });
+    const B = node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Submit' } });
+    const v1 = generate([A, B], cfg);
+    const prior = v1.drafts.map((d) => ({ identity: d.identity, fingerprint: d.fingerprint, disambiguator: d.disambiguator }));
+    const v2 = generate([B, A], cfg, prior); // reordered
+    const idOf = (r: typeof v1, fp: string) => r.drafts.find((d) => d.fingerprint === fp)!.id;
+    for (const d of v1.drafts) {
+      expect(idOf(v2, d.fingerprint)).toBe(d.id); // each element keeps its v1 id despite reorder
+    }
+  });
+
+  it('a new group member takes the next free slot without moving incumbents', () => {
+    const A = node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Save' } });
+    const B = node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Submit' } });
+    const v1 = generate([A, B], cfg);
+    const prior = v1.drafts.map((d) => ({ identity: d.identity, fingerprint: d.fingerprint, disambiguator: d.disambiguator }));
+    const C = node({ tag: 'button', signals: { event_handlers: { click: 'save' }, text: 'Apply' } });
+    const v2 = generate([C, A, B], cfg, prior); // C inserted FIRST in document order
+    const byFp = (r: typeof v2, fp: string) => r.drafts.find((d) => d.fingerprint === fp)!;
+    for (const d of v1.drafts) expect(byFp(v2, d.fingerprint).id).toBe(d.id); // incumbents unmoved
+    const cDraft = v2.drafts.find((d) => !v1.drafts.some((x) => x.fingerprint === d.fingerprint))!;
+    expect(cDraft.id).toBe('login__button--save--3'); // newcomer takes next free slot
+  });
 });
