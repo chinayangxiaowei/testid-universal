@@ -86,6 +86,8 @@ adapter 把这些符号解析为**定义的源码文本**(Vue:经 `@vue/compiler
 
 ## 快速上手
 
+> 手把手教程、CLI/配置/警告完整参考与 FAQ:**[USAGE.zh-CN.md](./USAGE.zh-CN.md)**。
+
 ```bash
 npm install            # core 零运行时依赖
 npm i -D @vue/compiler-sfc   # 仅在使用 Vue adapter 时需要(可选 peer 依赖)

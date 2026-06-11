@@ -96,6 +96,8 @@ baseline).
 
 ## Quick start
 
+> Step-by-step tutorial, full CLI/config/warning references, and FAQ: **[USAGE.md](./USAGE.md)**.
+
 ```bash
 npm install            # zero runtime deps in core
 npm i -D @vue/compiler-sfc   # only if you use the Vue adapter (optional peer dep)
