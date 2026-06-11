@@ -216,3 +216,34 @@ const form = {};
     expect(btn.signals.bound_identifiers).toMatchObject({ disabled: 'form.email' });
   });
 });
+
+describe('VueAdapter multi-line attribute with ">" (arrow functions)', () => {
+  const SFC = `<template>
+  <ul>
+    <ChildItem
+      v-for="(item, index) in items"
+      :key="item.id"
+      :item="item"
+      @update="newItem => updateItem(index, newItem)"
+    />
+  </ul>
+</template>
+
+<script setup>
+const items = [];
+function updateItem(i, v) { void i; void v; }
+</script>
+`;
+
+  it('locates the real opening-tag end past a ">" inside an attribute value', () => {
+    const adapter = new VueAdapter();
+    const nodes = adapter.parse(SFC, 'L.vue', 'l');
+    const child = nodes.find((n) => n.tag === 'ChildItem')!;
+    const written = adapter.write(SFC, [{ loc: child.loc!, attributeName: 'data-testid', id: 'l__childitem--x' }]);
+    // The original attribute must survive intact and the id must land at the tag end.
+    expect(written).toContain('@update="newItem => updateItem(index, newItem)"');
+    expect(written).toContain('data-testid="l__childitem--x" />');
+    // No corruption: the id must never be injected inside the handler expression.
+    expect(written).not.toMatch(/updateItem\(index,[^)]*data-testid/);
+  });
+});

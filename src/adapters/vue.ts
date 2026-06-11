@@ -23,6 +23,7 @@ interface VueProp {
   value?: { content: string };
   arg?: { content: string };
   exp?: { content: string };
+  loc?: VueLoc;
 }
 
 const NODE_ELEMENT = 1;
@@ -144,7 +145,14 @@ export class VueAdapter implements FrameworkAdapter {
         const hasBoundTestid = bound['data-testid'] != null || bound['data-cy'] != null;
         if (!hasBoundTestid) {
           const start = node.loc.start.offset;
-          const tagEnd = source.indexOf('>', start);
+          // The opening tag's '>' must be searched past the last prop: attribute
+          // values legally contain '>' (arrow-function handlers, comparisons), and
+          // a naive indexOf from the start would corrupt the write.
+          const afterProps = (node.props ?? []).reduce(
+            (max, p) => Math.max(max, p.loc?.end?.offset ?? 0),
+            start + node.tag.length + 1,
+          );
+          const tagEnd = source.indexOf('>', afterProps);
           nodes.push({
             component,
             tag: node.tag,
