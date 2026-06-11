@@ -81,3 +81,36 @@ prop's AST end offset.
 Verdict: the full daily loop — hygiene, feature, behavior change, retirement — runs on a
 popular real codebase with the dual-map signals doing the routing, and every iteration
 either passed or surfaced a tool bug that was fixed the same day.
+
+## Patch-stream simulation (2026-06-12) — upstream history as the developer, us as the test side only
+
+Method: branched Conduit at its 2020 build-up commit (`3b23542`, 3 SFCs) and replayed
+**8 real upstream commits** (P1–P8: flatten refactor, pagination, preview abstraction,
+fetch tags, article page, popular-tags refactor, login+register, login logic) by landing
+each commit's `src` wholesale, then doing ONLY test-side work: re-tag → diff → affected →
+regenerate constants → tsc gate → sync specs. No sticky ids survive a wholesale landing,
+so this is the pure **identity-stability** stress (the "tag-in-CI, tags not committed
+upstream" workflow variant).
+
+Results per step (registry v1→v9):
+- **P1 (flatten refactor)**: file renames changed component names (`Footer/index.vue` →
+  `Footer.vue`); footer ids correctly retired+reborn; the one retired id our spec used was
+  routed (`retire | index__link--https-thinkster-io | home.spec.ts`) and the tsc gate fired
+  with TypeScript itself suggesting the migration (`Did you mean
+  'footerLinkHttpsThinksterIo'?`). One-line spec fix, green.
+- **P2–P6** (features + refactors): registry advanced cleanly; none of the ids our specs
+  referenced were touched; **zero spec changes, tsc green at every step** — feed-toggle and
+  banner ids stayed identity-stable across five real commits including two refactors.
+- **P7 (login+register)**: write-new flood for the new pages → responded by adding a login
+  spec.
+- **P8 (login logic)**: mixed change — the template part flagged (`re-test |
+  login__form--onlogin`); the store internals (separate files; 2020 era has no
+  `<script setup>`) correctly produced no signal, matching the documented L2/L3 boundary.
+
+Simulation-mechanics note (not a tool bug): per-step landing must clear `src/` before
+`git checkout <sha> -- src`, or renamed-away files linger and mask retirements.
+
+Verdict: with no written ids to lean on, the identity model alone kept every
+spec-referenced anchor stable through 5 unrelated commits, surfaced the genuine breakage
+exactly once (component rename), and the constants+tsc gate made that breakage impossible
+to miss. The "patches as the developer, tool as the test side" loop is viable.
