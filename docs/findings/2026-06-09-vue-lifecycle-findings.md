@@ -87,3 +87,14 @@ re-test from a pure script-side behavior change, with ids (locators) completely 
 - **D — FIXED**: the CLI picks the adapter from the file set (`.vue` → `VueAdapter`,
   otherwise HTML; `--adapter` overrides), so `testid tag src --ext .vue` works.
 - **E** still holds; **F** added above.
+
+## G. Real-runner integration (2026-06-11) — closed with actual Playwright
+
+The sim app was made runnable (vite + vue-router) with a real Playwright suite anchored
+exclusively on generated constants. Verified in a real browser: (1) green 3-test baseline;
+(2) a handler-body edit routed and selectively re-ran ONLY `login.spec.ts` via
+`affected --out-list`; (3) removing an element made `tsc` fail at the exact stale
+reference (TS2339 on the vanished constant) and `affected` routed `retire` to the same
+file; retiring the case restored green. Management loop exercised end to end:
+`write-new` prompts creation, `re-test` drives selective re-runs, the compiler enforces
+retirement. The v-for shared-id limitation surfaced honestly (count-level assertions only).
