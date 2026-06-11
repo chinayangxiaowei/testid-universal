@@ -64,11 +64,17 @@ function readProps(node: VueNode) {
     if (p.type === PROP_ATTRIBUTE) attrs[p.name] = p.value?.content ?? '';
     else if (p.type === PROP_DIRECTIVE) {
       if (p.name === 'model') model = p.exp?.content ?? null;
-      else if (p.name === 'bind' && p.arg?.content) bound[p.arg.content] = p.exp?.content ?? '';
+      else if (p.name === 'bind' && p.arg?.content) bound[p.arg.content] = firstIdentifierPath(p.exp?.content ?? '');
       else if (p.name === 'on' && p.arg?.content) events[p.arg.content] = handlerName(p.exp?.content ?? '');
     }
   }
   return { attrs, bound, events, model };
+}
+
+/** First identifier path in a bind expression: "!form.email || x" -> "form.email". */
+function firstIdentifierPath(expr: string): string {
+  const m = /[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(expr);
+  return m ? m[0] : expr.trim();
 }
 
 /** Reduce a handler expression to a function name: "login" / "save()" -> "login"/"save". */
@@ -129,7 +135,9 @@ export class VueAdapter implements FrameworkAdapter {
     const visit = (node: VueNode, inLoop: boolean) => {
       const hasFor = (node.props ?? []).some((p) => p.type === PROP_DIRECTIVE && p.name === 'for');
       const loop = inLoop || hasFor;
-      if (node.type === NODE_ELEMENT && node.tag) {
+      // <template> is a non-rendering wrapper (slots, v-if groups): an attribute on
+      // it never reaches the DOM, so tagging it would mint a dead id.
+      if (node.type === NODE_ELEMENT && node.tag && node.tag.toLowerCase() !== 'template') {
         const { attrs, bound } = readProps(node);
         // An author-bound testid (e.g. :data-testid="'row-' + u.id") is the correct
         // per-instance fix for loops; respect it: never mint a static id next to it.

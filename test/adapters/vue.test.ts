@@ -182,3 +182,37 @@ export function saveOrder() { return limit; }
     expect(defs.limit).toBe('export const limit = 5;');
   });
 });
+
+describe('VueAdapter scale fixes', () => {
+  it('never tags <template> wrapper elements (non-rendering), but visits their children', () => {
+    const sfc = `<template>
+  <Suspense>
+    <template #fallback>
+      <div>Loading...</div>
+      <button @click="retry">Retry</button>
+    </template>
+  </Suspense>
+</template>
+<script setup>
+function retry() {}
+</script>
+`;
+    const nodes = new VueAdapter().parse(sfc, 'S.vue', 's');
+    expect(nodes.some((n) => n.tag === 'template')).toBe(false);
+    expect(nodes.some((n) => n.tag === 'button')).toBe(true);
+  });
+
+  it('reduces a bound expression to its first identifier path', () => {
+    const sfc = `<template>
+  <button :disabled="!form.email || !form.password" @click="go">Go</button>
+</template>
+<script setup>
+function go() {}
+const form = {};
+</script>
+`;
+    const nodes = new VueAdapter().parse(sfc, 'F.vue', 'f');
+    const btn = nodes.find((n) => n.tag === 'button')!;
+    expect(btn.signals.bound_identifiers).toMatchObject({ disabled: 'form.email' });
+  });
+});

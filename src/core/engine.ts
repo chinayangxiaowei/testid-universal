@@ -45,7 +45,10 @@ export function generate(nodes: ElementNode[], config: CoreConfig, prior?: Prior
     if (!shouldTag(node, config)) continue;
     const sig = normalizeSignals(node.signals);
     const { short, long } = classify(node.tag, sig, config);
-    const key = selectIdentityKey(sig, node.tag);
+    let key = selectIdentityKey(sig, node.tag);
+    // A key whose slug is empty (e.g. punctuation-only text) would mint ids ending in
+    // "--" and collide; fall back to the tag, marked unstable.
+    if (!slugify(key.value)) key = { value: node.tag, source: 'tag', stable: false };
     const identity = identityOf(node.component, short, key.value);
     // Only warn about a volatile key for elements that will be freshly minted; an
     // element that already carries a written id is sticky and is never recomputed.

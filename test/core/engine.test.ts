@@ -191,4 +191,13 @@ describe('generate', () => {
     const cDraft = v2.drafts.find((d) => !v1.drafts.some((x) => x.fingerprint === d.fingerprint))!;
     expect(cDraft.id).toBe('login__button--save--3'); // newcomer takes next free slot
   });
+
+  it('falls back to the tag when the selected key slugifies to nothing', () => {
+    const { drafts, warnings } = generate([
+      node({ tag: 'span', signals: { text: '()' } }),
+    ], cfg);
+    expect(drafts[0].id).toBe('login__span--span');
+    expect(drafts[0].identity).toBe('login::span::span');
+    expect(warnings.some((w) => w.code === 'unstable-identity')).toBe(true);
+  });
 });
