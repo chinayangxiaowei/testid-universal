@@ -114,3 +114,28 @@ Verdict: with no written ids to lean on, the identity model alone kept every
 spec-referenced anchor stable through 5 unrelated commits, surfaced the genuine breakage
 exactly once (component rename), and the constants+tsc gate made that breakage impossible
 to miss. The "patches as the developer, tool as the test side" loop is viable.
+
+## Patch stream extended (2026-06-12) — P9–P13, through 14 months of drift to the script-setup era
+
+- **P9 (AppLink replaces RouterLink + nav abstraction)**: the feed toggle moved into a
+  config-driven `ArticlesNavigation` (v-for) — both spec-referenced feed links retired,
+  both routed to `home.spec.ts`, tsc double-killed them; spec migrated to a count-level
+  assertion on the shared loop id. 35 write-new / 16 retire absorbed otherwise untouched.
+- **P10–P11** (settings/editor pages; favorites/tags/follow logic): green, zero spec edits.
+- **P12 (RELEASE JUMP — one step over ~14 months to `88c65af^`)**: 56 write-new / 47 retire
+  (upstream renamed components to `App*`). The only two spec-referenced casualties were
+  routed precisely, and `tsc` again *named the successors* (`Did you mean
+  'appnavigationApplinkLinkName' / 'appfooterLinkHttpsThinksterIo'?`). Login anchors
+  survived the entire 14 months untouched. Two sed-level fixes, green.
+- **P13 (`88c65af` — upgrade to script setup)**: **zero retire, zero write-new** — the
+  migration moved code, not identity, and every id held. The diff instead showed exactly
+  the expected **one-time symbol-onboarding wave**: 35 `re-test` rows
+  (`symbol:<name> null→hash`) as 35/89 entries gained definition hashes ({} baseline →
+  populated). Conservative direction (re-test once), and symbol-level tracking is live
+  from this version on. Note: this wave is distinct from the `symbol_defs === undefined`
+  pre-upgrade suppression — an empty-but-recorded baseline genuinely transitioned.
+
+Final registry: v14 across 13 landed upstream states. Verdict unchanged and strengthened:
+identity carried the anchors through a year-plus of real development including two mass
+renames, the gates caught every genuine breakage with compiler-suggested fixes, and the
+symbol layer switched itself on at the precise commit where the codebase made it possible.
