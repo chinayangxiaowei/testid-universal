@@ -3,5 +3,4 @@ export * from './contract';
 export * from './html';
 export * from './vue';
 export * from './angular';
-export * from './sketches';
 export * from './react';

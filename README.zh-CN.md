@@ -188,7 +188,7 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
 
 | 层 | 文件 | 框架相关? |
 | --- | --- | --- |
-| Adapters | `src/adapters/{contract,html,vue,angular,sketches}.ts` | **是——仅此层** |
+| Adapters | `src/adapters/{contract,html,vue,angular,react}.ts` | **是——仅此层** |
 | Core 引擎 | `src/core/{types,signals,identity,fingerprint,classify,format,sourcedeps,engine}.ts` | 否(纯函数) |
 | Registry | `src/registry/{storage,registry,diff}.ts` | 否 |
 | 定位器与常量 | `src/locators/` | 否 |
@@ -199,7 +199,7 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
 
 依赖只向下;core 除 `node:crypto` 外零依赖。新增一个框架 = 实现一个 adapter
 (`parse`、`write`,以及可选的 `resolveSymbolDefs`,即 L2 能力)。现有 adapter:
-**Vue** 与 **Angular**(均为 AST 驱动;Angular 模板与普通 HTML 同为 `.html` 扩展名,CLI 按内容特征自动识别)以及 **HTML**(正则扫描器,演示级);React 仅有草图。
+**Vue**、**Angular**(AST 驱动;Angular 模板与普通 HTML 同为 `.html` 扩展名,CLI 按内容特征自动识别)与 **React**(JSX/TSX,`@babel/parser`;一个 JSX 源节点对应 N 个运行时实例,故 identity 仅由 props 构建、各实例共享同一 id),另有 **HTML**(正则扫描器,演示级)。
 
 ## 不变量
 
@@ -219,12 +219,12 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
   仅名字。
 - `JsonFileStorage` 是 last-write-wins(无锁、无鉴权)——嵌入式够用,共享服务请换
   事务性存储。
-- HTML adapter 是正则扫描器;React adapter 尚未实现。
+- HTML adapter 是正则扫描器(演示级)。
 
 ## 开发
 
 ```bash
-npm test            # vitest(135 个测试)
+npm test            # vitest(152 个测试)
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 npm run demo        # HTML 端到端演示

@@ -198,7 +198,7 @@ and remote are interchangeable: the same `TestIdService` sits behind a `LocalTra
 
 | Layer | Files | Framework-aware? |
 | --- | --- | --- |
-| Adapters | `src/adapters/{contract,html,vue,angular,sketches}.ts` | **yes — only here** |
+| Adapters | `src/adapters/{contract,html,vue,angular,react}.ts` | **yes — only here** |
 | Core engine | `src/core/{types,signals,identity,fingerprint,classify,format,sourcedeps,engine}.ts` | no (pure) |
 | Registry | `src/registry/{storage,registry,diff}.ts` | no |
 | Locators & constants | `src/locators/` | no |
@@ -209,9 +209,10 @@ and remote are interchangeable: the same `TestIdService` sits behind a `LocalTra
 
 Dependencies point downward; the core depends on nothing but `node:crypto`. A new
 framework = one adapter implementing `parse`, `write`, and optionally
-`resolveSymbolDefs` (the L2 capability). Adapters today: **Vue** and **Angular** (both AST-backed; Angular templates are
-content-sniffed automatically since they share the `.html` extension) and **HTML**
-(regex scanner, demo-grade); React exists as a sketch.
+`resolveSymbolDefs` (the L2 capability). Adapters today: **Vue**, **Angular** (AST-backed; Angular templates are content-sniffed
+automatically since they share the `.html` extension) and **React** (JSX/TSX via
+`@babel/parser`; one JSX source node renders N runtime instances, so identity is built
+from props only and instances share one id), plus **HTML** (regex scanner, demo-grade).
 
 ## Invariants
 
@@ -232,12 +233,12 @@ content-sniffed automatically since they share the `.html` extension) and **HTML
   options API / plain `<script>` resolve name-only.
 - `JsonFileStorage` is last-write-wins (no locking/auth) — fine embedded, use a
   transactional storage for a shared service.
-- The HTML adapter is a regex scanner; the React adapter is not yet implemented.
+- The HTML adapter is a regex scanner (demo-grade).
 
 ## Development
 
 ```bash
-npm test            # vitest (135 tests)
+npm test            # vitest (152 tests)
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 npm run demo        # HTML end-to-end demo

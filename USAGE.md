@@ -19,6 +19,7 @@ way with `--ext .html`.
 ```bash
 npm i -D testid-universal @vue/compiler-sfc   # optional peer, Vue projects only
 npm i -D @angular/compiler                    # optional peer, Angular projects only
+npm i -D @babel/parser                        # optional peer, React projects only
 ```
 
 ### 1.2 First tagging run
@@ -137,7 +138,7 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 
 | Command | Flags | Notes |
 | --- | --- | --- |
-| `tag <paths...>` | `--ext .html\|.vue[,…]` (default `.html`) · `--adapter html\|vue\|angular` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter auto-picked: `.vue` → Vue; `.html` with Angular markers (`(event)=`, `*ngIf`, …) → Angular; else HTML. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals |
+| `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]` (default `.html`) · `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter auto-picked: `.vue` → Vue; `.jsx`/`.tsx` → React (legacy `.js` JSX: pass `--ext .js --adapter react`); `.html` with Angular markers (`(event)=`, `*ngIf`, …) → Angular; else HTML. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals |
 | `diff <from> <to>` | — | markdown diff to stdout (field-level + `symbol:` changes) |
 | `gen-locators` | `--target robot\|playwright\|cypress` (default `robot`) · `--out DIR` (default `tests/locators`) · `--attr` | selector convention `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE` (default stdout) | throws on constant-name collision (fail-closed guarantee) |
