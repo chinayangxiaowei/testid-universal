@@ -119,3 +119,18 @@ describe('AngularAdapter raw binding expressions (fingerprint-only)', () => {
     expect(fingerprintOf('button', nb)).not.toBe(fingerprintOf('button', na));
   });
 });
+
+describe('AngularAdapter resolveSymbolDefs on export-default classes', () => {
+  it('finds members of an `export default class` (the realworld settings pattern)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ngdef-'));
+    const tpl = join(dir, 'settings.component.html');
+    writeFileSync(tpl, '<form (ngSubmit)="submitForm()"></form>');
+    writeFileSync(join(dir, 'settings.component.ts'), [
+      'export default class SettingsComponent {',
+      '  submitForm() { return 1; }',
+      '}',
+    ].join('\n'));
+    const defs = new AngularAdapter().resolveSymbolDefs(['submitForm'], '', tpl);
+    expect(defs.submitForm).toContain('submitForm() { return 1; }');
+  });
+});

@@ -146,7 +146,10 @@ export class AngularAdapter implements FrameworkAdapter {
     }
     const slice = (node: any) => content.slice(node.start, node.end);
     const handleDecl = (node: any) => {
-      const decl = node.type === 'ExportNamedDeclaration' && node.declaration ? node.declaration : node;
+      const decl =
+        (node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration') && node.declaration
+          ? node.declaration
+          : node;
       if (decl.type === 'FunctionDeclaration' && decl.id && names.includes(decl.id.name)) {
         result[decl.id.name] = slice(node);
       } else if (decl.type === 'VariableDeclaration') {
