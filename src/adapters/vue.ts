@@ -107,7 +107,9 @@ function normalize(node: VueNode): RawSignals {
     return null;
   };
   const signals: RawSignals = {
-    explicit_key: pick('data-tid'),
+    // explicit_key must be an authored literal — a bound :data-tid is not an
+    // explicit key (contract rule, parity-tested).
+    explicit_key: attrs['data-tid'] ?? null,
     form_control: model ?? pick('name'),
     name: pick('name'),
     route: pick('to', 'href'),

@@ -176,18 +176,21 @@ export class ReactAdapter implements FrameworkAdapter {
         .join('')
         .trim();
 
+      // Contract rule (parity-tested): named slot = static attr ?? bound root.
+      // explicit_key is the one exception — it must be an authored literal.
+      const g = (k: string) => attrs[k] ?? bound[k] ?? null;
       const signals: RawSignals = {
         explicit_key: attrs['data-tid'] ?? null,
-        form_control: attrs['name'] ?? null,
-        name: attrs['name'] ?? null,
-        route: attrs['to'] ?? bound['to'] ?? attrs['href'] ?? null,
+        form_control: g('name'),
+        name: g('name'),
+        route: g('to') ?? g('href'),
         event_handlers: events,
         bound_identifiers: bound,
-        html_id: attrs['id'] ?? null,
-        aria_label: attrs['aria-label'] ?? null,
-        placeholder: attrs['placeholder'] ?? null,
-        type: attrs['type'] ?? null,
-        role: attrs['role'] ?? null,
+        html_id: g('id'),
+        aria_label: g('aria-label'),
+        placeholder: g('placeholder'),
+        type: g('type'),
+        role: g('role'),
       };
       if (Object.keys(exprs).length) signals.static_attributes = exprs;
       if (text) signals.text = text;
