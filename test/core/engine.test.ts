@@ -212,3 +212,50 @@ describe('generate', () => {
   });
 });
 
+
+describe('component-multiplicity warning (cross-file reuse)', () => {
+  const defining = (component: string) =>
+    node({ component, tag: 'button', signals: { event_handlers: { click: 'go' } } });
+  const usage = (component: string, tag: string) => node({ component, tag, signals: {} });
+
+  it('warns once when a component with tagged elements is instantiated twice', () => {
+    const { warnings } = generate(
+      [defining('ArticlePreview'), usage('Home', 'ArticlePreview'), usage('Home', 'ArticlePreview')],
+      DEFAULT_CONFIG,
+    );
+    const w = warnings.filter((x) => x.code === 'component-multiplicity');
+    expect(w).toHaveLength(1);
+    expect(w[0].message).toContain('2 times');
+    expect(w[0].message).toContain('ArticlePreview');
+  });
+
+  it('matches kebab-case usage (Vue) and app- prefixed selectors (Angular)', () => {
+    const { warnings: vue } = generate(
+      [defining('ArticlePreview'), usage('Home', 'article-preview'), usage('Profile', 'article-preview')],
+      DEFAULT_CONFIG,
+    );
+    expect(vue.some((x) => x.code === 'component-multiplicity')).toBe(true);
+    const { warnings: ng } = generate(
+      [defining('article-list'), usage('home', 'app-article-list'), usage('profile', 'app-article-list')],
+      DEFAULT_CONFIG,
+    );
+    expect(ng.some((x) => x.code === 'component-multiplicity')).toBe(true);
+  });
+
+  it('does not warn on single use, and never counts native tags as component usage', () => {
+    const single = generate([defining('ArticlePreview'), usage('Home', 'ArticlePreview')], DEFAULT_CONFIG);
+    expect(single.warnings.some((x) => x.code === 'component-multiplicity')).toBe(false);
+    // A component named Button must not match native <button> elements.
+    const native = generate(
+      [defining('Button'), usage('Home', 'button'), usage('Profile', 'button')],
+      DEFAULT_CONFIG,
+    );
+    expect(native.warnings.some((x) => x.code === 'component-multiplicity')).toBe(false);
+  });
+
+  it('does not warn for a reused component that has no tagged elements', () => {
+    const bare = node({ component: 'Spacer', tag: 'div', signals: {} }); // no signals -> no id
+    const { warnings } = generate([bare, usage('Home', 'Spacer'), usage('Profile', 'Spacer')], DEFAULT_CONFIG);
+    expect(warnings.some((x) => x.code === 'component-multiplicity')).toBe(false);
+  });
+});

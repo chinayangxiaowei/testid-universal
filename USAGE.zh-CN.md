@@ -162,6 +162,7 @@ html_id → structural → child_shape → text → aria_label → placeholder �
 | `unstable-identity` | 新铸 id 的 key 落到了文案(`text`/`aria_label`/`placeholder`)或裸 tag | 测试要定位它就加 `data-tid`;否则可忽略(写入后 id 即 sticky) |
 | `loop-multiplicity` | 元素在 `v-for`/`*ngFor` 内——一个静态 id,N 个渲染实例 | 改绑定式按项 id(`:data-testid="'x-' + item.id"`);tagger 之后会整体跳过它 |
 | `positional-disambiguator` | 同 identity 兄弟无可区分稳定 token,按位置分配槽位(registry 稳定,但对*完全相同*的元素重排敏感) | 给其中一个加显式 `data-tid` |
+| `component-multiplicity` | 内含已打标元素的组件在本次 run 中被实例化 ≥2 次(`<ArticlePreview>`×N、`app-list-errors`×N……)——其内部每个 id 在 DOM 中出现 N 份(`loop-multiplicity` 的跨文件版) | 查询时限定实例容器作用域,或在组件内部绑定按实例区分的 id;内部没有 id 的组件不报(不会产生重复) |
 
 ## 5. 注册表文件
 

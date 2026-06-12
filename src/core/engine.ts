@@ -127,6 +127,36 @@ export function generate(nodes: ElementNode[], config: CoreConfig, prior?: Prior
     drafts.push({ id, sticky: false, disambiguator, ...common });
   }
   stats.tagged = drafts.length;
+
+  // Cross-file component reuse: a component instantiated N>=2 times means every
+  // static id inside it appears N times in the rendered DOM (the loop warning's
+  // cross-file sibling). Only custom-looking tags (an uppercase letter or a
+  // hyphen) count as instantiations -- a component file named Button must never
+  // match native <button> elements. Angular selectors commonly prefix `app-`.
+  const normName = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const idsPerComponent = new Map<string, number>();
+  for (const d of drafts) idsPerComponent.set(d.component, (idsPerComponent.get(d.component) ?? 0) + 1);
+  const byNorm = new Map<string, string>();
+  for (const c of new Set(nodes.map((n) => n.component))) {
+    byNorm.set(normName(c), c);
+    byNorm.set(`app${normName(c)}`, c);
+  }
+  const uses = new Map<string, number>();
+  for (const n of nodes) {
+    if (!/[A-Z-]/.test(n.tag)) continue;
+    const c = byNorm.get(normName(n.tag));
+    if (c != null) uses.set(c, (uses.get(c) ?? 0) + 1);
+  }
+  for (const [c, count] of uses) {
+    const ids = idsPerComponent.get(c) ?? 0;
+    if (count >= 2 && ids > 0) {
+      warnings.push({
+        code: 'component-multiplicity', element_type: 'component', identity: c,
+        message: `component "${c}" is instantiated ${count} times across the tagged files; each of its ${ids} static testid(s) will appear ${count} times in the DOM. Scope queries to an instance container or bind per-instance ids.`,
+      });
+    }
+  }
+
   return { drafts, warnings, stats };
 }
 

@@ -173,6 +173,7 @@ html_id → structural → child_shape → text → aria_label → placeholder �
 | `unstable-identity` | a freshly-minted id's key fell through to copy (`text`/`aria_label`/`placeholder`) or the bare tag | add a `data-tid` if tests will target it; otherwise ignorable (the id is sticky once written) |
 | `loop-multiplicity` | element is inside `v-for`/`*ngFor` — one static id, N rendered instances | bind a per-item id (`:data-testid="'x-' + item.id"`); the tagger then skips it entirely |
 | `positional-disambiguator` | same-identity siblings with no distinguishing stable token; slots assigned positionally (registry-stable, but reorder-sensitive for *identical* elements) | give one of them an explicit `data-tid` |
+| `component-multiplicity` | a component whose file contains tagged elements is instantiated >= 2 times across the run (`<ArticlePreview>` x N, `app-list-errors` x N, ...) — every id inside it appears N times in the DOM (the cross-file sibling of `loop-multiplicity`) | scope queries to an instance container, or bind per-instance ids inside the component; components with no internal ids stay silent (no duplicates arise) |
 
 ## 5. Registry files
 

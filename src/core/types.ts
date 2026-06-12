@@ -71,7 +71,7 @@ export interface TagStats {
 }
 
 export interface Warning {
-  code: 'unstable-identity' | 'positional-disambiguator' | 'loop-multiplicity';
+  code: 'unstable-identity' | 'positional-disambiguator' | 'loop-multiplicity' | 'component-multiplicity';
   element_type: string;
   identity: string;
   message: string;
