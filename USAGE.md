@@ -229,3 +229,18 @@ statement. That is why the periodic full run exists.
 
 **`tag` on `.vue` errors about `@vue/compiler-sfc`.**
 Install the optional peer: `npm i -D @vue/compiler-sfc`.
+
+**What coverage percentage is "the standard"?**
+There is no universal one. Mandated numbers exist only in safety-critical UNIT-coverage
+standards (DO-178C: 100% MC/DC for level A; ISO 26262 tiers); for ordinary code coverage
+the industry folklore is an 80% CI gate (Google's tiers: 60% acceptable / 75%
+commendable / 90% exemplary — with the caveat that coverage only tells you what is
+definitely UNtested). For the interactive e2e coverage this tool reports there is NO
+industry baseline at all. Use it the validated way instead of chasing a number:
+(1) critical user journeys (login, payment, core CRUD) → every interactive element
+referenced, defined by business path, not percentage; (2) the long tail → measure the
+baseline, act on the biggest ⚠ cluster, then ratchet: set `--min` to the new measured
+value so it can only go up; (3) trust the denominator before the ratio — a fix that
+makes the denominator more honest will LOWER the percentage (here: 59.6% → 54.7% when
+wired-but-unnamed components started counting), and that is progress, not regression.
+Recalibrate `--min` after upgrading, don't revert.
