@@ -139,3 +139,15 @@ Final registry: v14 across 13 landed upstream states. Verdict unchanged and stre
 identity carried the anchors through a year-plus of real development including two mass
 renames, the gates caught every genuine breakage with compiler-suggested fixes, and the
 symbol layer switched itself on at the precise commit where the codebase made it possible.
+
+## Coverage reality check (2026-06-12) — "all green" was running at 9% coverage
+
+User critique validated: the P0–P13 stream stayed green while `write-new |
+(none referencing)` rows scrolled past unaccumulated. The new `testid coverage` command
+quantified it on patch-sim v14: **6/89 ids referenced overall (6.7%), 5/54 interactive
+(9.3%)** — and `--min 50` correctly failed the gate (exit 1). The uncovered table is a
+prioritized worklist (54 ⚠ interactive ids: register/settings/editor forms, favorite and
+follow buttons, comment form...). Companion fix: `tag` now reports per-run tagging stats
+(`tagged/parsed, no-signal, policy-skipped`), so silently-untaggable elements are visible
+at tag time instead of vanishing. Lesson recorded: diff-green proves consistency of what
+tests reference; the coverage gate is what proves adequacy.

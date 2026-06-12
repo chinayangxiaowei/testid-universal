@@ -93,6 +93,9 @@ npx tsc --noEmit          # e2e/login.spec.ts: TS2339 Property 'loginLinkForgot'
 npx testid tag src --ext .vue --check      # 需要打标则 exit 1;什么都不写
 ```
 
+再加一道覆盖率闸门,防止"diff 全绿"掩盖未被测试的表面:`testid coverage --tests e2e
+--min 60` 在交互元素覆盖率低于阈值时让 CI 失败(`tag` 也会逐次打印打标统计:
+多少解析到的元素根本没拿到 id)。
 五段管线(check → 常量+tsc → affected → 选择性执行 → 全量兜底)按
 `docs/superpowers/specs/2026-06-11-ci-integration-design.md` 搭建。两条诚实规则:
 git diff 超出被打标组件文件范围时放弃选择性、升级全量;保留夜间/合并后全量
@@ -111,6 +114,7 @@ git diff 超出被打标组件文件范围时放弃选择性、升级全量;保�
 | `diff <from> <to>` | — | markdown diff 到 stdout(字段级 + `symbol:` 变更) |
 | `gen-locators` | `--target robot\|playwright\|cypress`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE`(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
+| `coverage` | `--tests DIR[,DIR]`(默认 `e2e`)· `--min N` | 已打标 id 被测试引用的覆盖率(总体 + 交互元素);`--min` 以交互覆盖率为闸门(低于则 exit 1) |
 | `affected <from> <to>` | `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |
 
 后端:`npm run serve` 启动 REST 外壳(`PORT`、`REGISTRY_DIR` 环境变量)。

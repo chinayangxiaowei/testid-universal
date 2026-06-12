@@ -101,6 +101,9 @@ and the suite is green again.
 npx testid tag src --ext .vue --check      # exit 1 if tagging is needed; writes NOTHING
 ```
 
+Add a coverage gate so green diffs cannot hide an untested surface: `testid coverage
+--tests e2e --min 60` fails CI when the interactive-id coverage drops below the bar
+(`tag` also prints per-run tagging stats: how many parsed elements got no id at all).
 Wire the five stages (check → constants+tsc → affected → selective run → full-run
 fallback) per `docs/superpowers/specs/2026-06-11-ci-integration-design.md`. Two rules to
 keep honest: selective execution only when the git diff is confined to tagged component
@@ -120,6 +123,7 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 | `diff <from> <to>` | — | markdown diff to stdout (field-level + `symbol:` changes) |
 | `gen-locators` | `--target robot\|playwright\|cypress` (default `robot`) · `--out DIR` (default `tests/locators`) · `--attr` | selector convention `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE` (default stdout) | throws on constant-name collision (fail-closed guarantee) |
+| `coverage` | `--tests DIR[,DIR]` (default `e2e`) · `--min N` | coverage of tagged ids by tests (overall + interactive); `--min` gates on the interactive percentage (exit 1 below) |
 | `affected <from> <to>` | `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
 
 Backend: `npm run serve` boots the REST shell (`PORT`, `REGISTRY_DIR` env vars).
