@@ -76,3 +76,24 @@ Both actionable gaps surfaced by this comparison are closed (commit `9edab11`, 1
    what each tool tags".
 2. **`tag --check` now prints identity warnings** before its verdict, so the CI gate
    surfaces hygiene findings instead of swallowing them.
+
+## Honesty addendum — how this comparison ran without an Angular adapter
+
+The comparison used `HtmlTemplateAdapter` as a *proxy* for Angular: it deliberately maps a
+small Angular vocabulary subset (`formControlName`, `routerLink`, plain attrs, and now
+`*ngFor`), which is sufficient for the compared dimensions because those live in the
+adapter-independent engine/registry/diff policy layer. It is NOT an Angular adapter:
+no `(event)` handlers, no `[bound]` inputs, no context/child_shape, no component-class
+symbol resolution, regex-not-AST parsing. The 12/23-vs-23/23 tagging asymmetry in the raw
+results is the direct footprint of that gap.
+
+Fairness correction to dimension 2: the S1 precision figure partially benefits from our
+smaller tracked surface (the h1 is policy-skipped, so its copy change is invisible to us).
+Like-for-like — had we tagged the h1 — our S1 modified would be **2** (two field-level
+rows) vs the original's **7** (context ripple): the precision lead stands, but the honest
+ratio is 7:2 per copy-edit event, not the headline 11:1 aggregate.
+
+Implication: a real Angular adapter (HANDOFF P2: `@angular/compiler` `parseTemplate`, with
+`resolveSymbolDefs` over the component class) remains unbuilt and is the prerequisite for
+a full-fidelity comparison — and for Angular users getting the same key quality (handler-
+keyed buttons instead of text-keyed) the original demonstrates on this venue.
