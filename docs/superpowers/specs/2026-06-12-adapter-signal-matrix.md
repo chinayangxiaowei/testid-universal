@@ -42,3 +42,11 @@ semantic markup in each framework must produce the same identity key).
 (too wide — rule 2). Upgrade note: elements that previously fell to a weaker key
 because a binding form was invisible may re-key on the next `--regenerate`; written
 ids stay sticky regardless.
+
+Same-day follow-up (triggered by "is coverage an adapter concern?"): the
+`tabindex >= 0` criterion of `isInteractive` read `static_attributes.tabindex`, which
+no real adapter populated for the static form — focusable custom controls were missing
+from the interactive-coverage denominator. All adapters now pass static `tabindex`
+through (parity-tested). Coverage itself stays core-owned (engine tag stats,
+`src/testmap/` static report, `src/runtime/` recorder); adapters only feed the
+denominator — which is precisely why their mappings need this audit gate.
