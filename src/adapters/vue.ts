@@ -60,16 +60,20 @@ function readProps(node: VueNode) {
   const attrs: Record<string, string> = {};
   const bound: Record<string, string> = {};
   const events: Record<string, string> = {};
+  // Raw expression text feeds static_attributes (fingerprint-only): an expression
+  // edit inside a binding flags `modified` while identity sees only the root name.
+  const exprs: Record<string, string> = {};
   let model: string | null = null;
   for (const p of node.props ?? []) {
     if (p.type === PROP_ATTRIBUTE) attrs[p.name] = p.value?.content ?? '';
     else if (p.type === PROP_DIRECTIVE) {
-      if (p.name === 'model') model = p.exp?.content ?? null;
-      else if (p.name === 'bind' && p.arg?.content) bound[p.arg.content] = firstIdentifierPath(p.exp?.content ?? '');
-      else if (p.name === 'on' && p.arg?.content) events[p.arg.content] = handlerName(p.exp?.content ?? '');
+      const raw = p.exp?.content ?? '';
+      if (p.name === 'model') { model = raw || null; exprs['v-model'] = raw; }
+      else if (p.name === 'bind' && p.arg?.content) { bound[p.arg.content] = firstIdentifierPath(raw); exprs[`:${p.arg.content}`] = raw; }
+      else if (p.name === 'on' && p.arg?.content) { events[p.arg.content] = handlerName(raw); exprs[`@${p.arg.content}`] = raw; }
     }
   }
-  return { attrs, bound, events, model };
+  return { attrs, bound, events, model, exprs };
 }
 
 /** First identifier path in a bind expression: "!form.email || x" -> "form.email". */
@@ -94,7 +98,7 @@ function directText(node: VueNode): string | null {
 }
 
 function normalize(node: VueNode): RawSignals {
-  const { attrs, bound, events, model } = readProps(node);
+  const { attrs, bound, events, model, exprs } = readProps(node);
   const pick = (...keys: string[]) => {
     for (const k of keys) {
       if (attrs[k] != null && attrs[k] !== '') return attrs[k];
@@ -115,6 +119,7 @@ function normalize(node: VueNode): RawSignals {
     type: pick('type'),
     role: pick('role'),
   };
+  if (Object.keys(exprs).length) signals.static_attributes = exprs;
   const text = directText(node);
   if (text) signals.text = text;
   return signals;

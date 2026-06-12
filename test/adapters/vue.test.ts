@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { VueAdapter, VUETIFY_TAG_MAP } from '../../src/adapters/vue';
 import { ElementNode } from '../../src/core/types';
+import { normalizeSignals } from '../../src/core/signals';
+import { selectIdentityKey } from '../../src/core/identity';
+import { fingerprintOf } from '../../src/core/fingerprint';
 
 const SFC = `<template>
   <v-form>
@@ -245,5 +248,18 @@ function updateItem(i, v) { void i; void v; }
     expect(written).toContain('data-testid="l__childitem--x" />');
     // No corruption: the id must never be injected inside the handler expression.
     expect(written).not.toMatch(/updateItem\(index,[^)]*data-testid/);
+  });
+});
+
+describe('VueAdapter raw binding expressions (fingerprint-only)', () => {
+  const sfc = (tpl: string) => `<template>${tpl}</template>`;
+  it('an expression edit inside :bind changes the fingerprint but not identity', () => {
+    const adapter = new VueAdapter();
+    const before = adapter.parse(sfc('<button :disabled="count > 3" @click="save">S</button>'), 'A.vue', 'A')[0];
+    const after = adapter.parse(sfc('<button :disabled="count > 4" @click="save">S</button>'), 'A.vue', 'A')[0];
+    const nb = normalizeSignals(before.signals);
+    const na = normalizeSignals(after.signals);
+    expect(selectIdentityKey(nb, 'button').value).toBe(selectIdentityKey(na, 'button').value);
+    expect(fingerprintOf('button', nb)).not.toBe(fingerprintOf('button', na));
   });
 });

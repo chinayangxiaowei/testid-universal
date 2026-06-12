@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AngularAdapter } from '../../src/adapters/angular';
 import { ElementNode } from '../../src/core/types';
+import { normalizeSignals } from '../../src/core/signals';
+import { selectIdentityKey } from '../../src/core/identity';
+import { fingerprintOf } from '../../src/core/fingerprint';
 
 const TPL = `<form [formGroup]="form" (ngSubmit)="onSubmit()">
   <h1>Sign in</h1>
@@ -91,5 +94,28 @@ export class LoginComponent {
   it('degrades to all-null when no companion file exists', () => {
     const defs = new AngularAdapter().resolveSymbolDefs!(['x'], '', join(dir, 'missing.component.html'));
     expect(defs.x).toBeNull();
+  });
+});
+
+describe('AngularAdapter raw binding expressions (fingerprint-only)', () => {
+  it('a pipe added inside a binding changes the fingerprint but not identity', () => {
+    const adapter = new AngularAdapter();
+    const before = adapter.parse('<img [src]="p.image" />', 'profile.component.html', 'profile')[0];
+    const after = adapter.parse('<img [src]="p.image | defaultImage" />', 'profile.component.html', 'profile')[0];
+    const nb = normalizeSignals(before.signals);
+    const na = normalizeSignals(after.signals);
+    expect(selectIdentityKey(nb, 'img').value).toBe(selectIdentityKey(na, 'img').value);
+    expect(fingerprintOf('img', nb)).not.toBe(fingerprintOf('img', na));
+  });
+
+  it('a handler argument change flags the fingerprint while the handler key holds', () => {
+    const adapter = new AngularAdapter();
+    const before = adapter.parse('<button (click)="save(item)">S</button>', 'a.component.html', 'a')[0];
+    const after = adapter.parse('<button (click)="save(item, true)">S</button>', 'a.component.html', 'a')[0];
+    const nb = normalizeSignals(before.signals);
+    const na = normalizeSignals(after.signals);
+    expect(selectIdentityKey(nb, 'button').value).toBe('save');
+    expect(selectIdentityKey(na, 'button').value).toBe('save');
+    expect(fingerprintOf('button', nb)).not.toBe(fingerprintOf('button', na));
   });
 });

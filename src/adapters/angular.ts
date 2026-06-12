@@ -62,8 +62,20 @@ export class AngularAdapter implements FrameworkAdapter {
           for (const a of n.attributes ?? []) attrs[String(a.name).toLowerCase()] = a.value ?? '';
           const bound: Record<string, string> = {};
           const events: Record<string, string> = {};
-          for (const i of n.inputs ?? []) bound[String(i.name).toLowerCase()] = firstIdentifierPath(i.value?.source ?? '');
-          for (const o of n.outputs ?? []) events[String(o.name).toLowerCase()] = handlerName(o.handler?.source ?? '');
+          // Raw expression text goes to static_attributes (fingerprint-only): a pipe or
+          // argument edit inside a binding must flag `modified` even though identity
+          // only sees the normalized root/handler name.
+          const exprs: Record<string, string> = {};
+          for (const i of n.inputs ?? []) {
+            const raw = i.value?.source ?? '';
+            bound[String(i.name).toLowerCase()] = firstIdentifierPath(raw);
+            exprs[`[${String(i.name).toLowerCase()}]`] = raw;
+          }
+          for (const o of n.outputs ?? []) {
+            const raw = o.handler?.source ?? '';
+            events[String(o.name).toLowerCase()] = handlerName(raw);
+            exprs[`(${String(o.name).toLowerCase()})`] = raw;
+          }
 
           // An author-bound [attr.data-testid] is the per-item loop fix: respect it.
           const hasBoundTestid = (n.inputs ?? []).some((i: any) =>
@@ -89,6 +101,7 @@ export class AngularAdapter implements FrameworkAdapter {
               type: attrs['type'] ?? null,
               role: attrs['role'] ?? null,
             };
+            if (Object.keys(exprs).length) signals.static_attributes = exprs;
             if (text) signals.text = text;
 
             out.push({
