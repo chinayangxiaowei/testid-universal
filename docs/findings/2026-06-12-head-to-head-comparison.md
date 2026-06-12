@@ -62,3 +62,17 @@ and ours leads 11:1 on re-test precision; the original leads where we haven't po
 breadth (HTML/Angular loop detection — to fix; safety nets — backlog by choice). S4
 crystallizes the philosophical difference: suggestion-with-confidence vs
 deterministic-and-fail-closed.
+
+## Post-comparison fixes (same day)
+
+Both actionable gaps surfaced by this comparison are closed (commit `9edab11`, 127 tests):
+
+1. **HTML adapter now detects `*ngFor` subtrees** (naive closing-tag range scan, consistent
+   with the adapter's documented text-extraction approach) and marks elements `inLoop`.
+   Re-validated on the comparison venue: ours now emits **3 loop warnings** on the users
+   table (td + Edit/Delete buttons; the bare `tr`/inner `td` carry no signal and are not
+   tagged, hence not warned — vs the original's 5 which include untagged-by-us elements).
+   Dimension 4 of the comparison moves from "original wins" to "near-parity, scoped to
+   what each tool tags".
+2. **`tag --check` now prints identity warnings** before its verdict, so the CI gate
+   surfaces hygiene findings instead of swallowing them.
