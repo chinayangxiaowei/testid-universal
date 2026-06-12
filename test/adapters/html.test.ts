@@ -34,3 +34,25 @@ describe('HtmlTemplateAdapter.write (idempotent)', () => {
     expect(twice).toBe(once);
   });
 });
+
+describe('HtmlTemplateAdapter *ngFor loop detection', () => {
+  const TPL = `<table>
+  <tr><th>Name</th></tr>
+  <tr *ngFor="let u of users">
+    <td>{{ u.name }}</td>
+    <td><button (click)="edit(u)">Edit</button></td>
+  </tr>
+</table>
+<button (click)="save()">Save</button>`;
+
+  it('marks the *ngFor element and elements inside its subtree as inLoop', () => {
+    const nodes = new HtmlTemplateAdapter().parse(TPL, 'u.html', 'users');
+    const by = (pred: (n: any) => boolean) => nodes.filter(pred);
+    const loopTr = by((n) => n.tag === 'tr')[1];
+    expect(loopTr.inLoop).toBe(true);
+    const buttons = by((n) => n.tag === 'button');
+    expect(buttons[0].inLoop).toBe(true);   // Edit, inside the loop
+    expect(buttons[1].inLoop ?? false).toBe(false); // Save, outside
+    expect(by((n) => n.tag === 'th')[0].inLoop ?? false).toBe(false);
+  });
+});

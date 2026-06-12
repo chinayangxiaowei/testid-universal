@@ -90,6 +90,10 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
     // file re-serializes byte-identically, so any difference = untagged elements.
     const checkTransport = new LocalTransport(new InMemoryStorage());
     const checked = await runPipeline(adapter, checkTransport, files, config);
+    if (checked.warnings.length) {
+      console.warn(`${checked.warnings.length} identity warning(s):`);
+      for (const w of checked.warnings) console.warn(`  - ${w.message}`);
+    }
     const changed = checked.tagged.filter((t) => t.after !== t.before).map((t) => t.file);
     if (changed.length) {
       console.error(`tagging required for ${changed.length} file(s):`);

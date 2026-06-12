@@ -41,11 +41,21 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
     // Match an opening tag and capture: tag name, attribute blob, end offset of the tag.
     const tagRe = /<([a-zA-Z][\w-]*)((?:\s+[^<>]*?)?)\s*\/?>/g;
     let m: RegExpExecArray | null;
+    // Source ranges spanned by *ngFor subtrees (naive closing-tag scan, consistent
+    // with this adapter's text extraction): elements starting inside one are inLoop.
+    const loopRanges: { start: number; end: number }[] = [];
     while ((m = tagRe.exec(source)) !== null) {
       const tag = m[1];
       if (tag === 'template' || tag === 'ng-container' || tag === 'ng-template') continue;
       const attrBlob = m[2] ?? '';
       const attrs = parseAttrs(attrBlob);
+
+      const hasNgFor = attrBlob.includes('*ngFor') || attrBlob.includes('*ngfor');
+      if (hasNgFor && !VOID_TAGS.has(tag.toLowerCase())) {
+        const close = source.indexOf(`</${tag}`, tagRe.lastIndex);
+        loopRanges.push({ start: m.index, end: close === -1 ? source.length : close });
+      }
+      const inLoop = hasNgFor || loopRanges.some((r) => m!.index > r.start && m!.index < r.end);
 
       // Capture direct text content for non-void tags (used as text_content hint).
       let text: string | null = null;
@@ -65,6 +75,7 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
         component, tag, signals,
         existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
         loc: { file, start: m.index, end: tagEnd },
+        inLoop,
       });
     }
     return nodes;
