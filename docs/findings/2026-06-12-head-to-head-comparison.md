@@ -97,3 +97,15 @@ Implication: a real Angular adapter (HANDOFF P2: `@angular/compiler` `parseTempl
 `resolveSymbolDefs` over the component class) remains unbuilt and is the prerequisite for
 a full-fidelity comparison — and for Angular users getting the same key quality (handler-
 keyed buttons instead of text-keyed) the original demonstrates on this venue.
+
+## Design input for the future Angular adapter — content-based detection
+
+Angular templates are reliably identifiable by CONTENT, removing the `.html` ambiguity
+without filename conventions: parenthesized event bindings `(click)=`, bracketed property
+bindings `[x]=` / `[(ngModel)]=`, structural directives `*ngIf/*ngFor`, v17 blocks
+`@if(/@for(/@defer`, and vocabulary (`formControlName`, `routerLink`, `<ng-container>`)
+do not occur in valid plain HTML. Adapter auto-pick becomes: `.vue` → Vue; `.html` with
+Angular markers → Angular; other `.html` → HTML; `--adapter` always wins. False negatives
+(marker-free static templates) are harmless — both adapters parse those identically. The
+same sniffing doubles as companion-file pairing confirmation for L2 symbol resolution
+(`foo.component.html` ↔ `foo.component.ts` via `templateUrl` verification).
