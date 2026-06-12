@@ -178,8 +178,9 @@ and remote are interchangeable: the same `TestIdService` sits behind a `LocalTra
 ### Locator generation
 
 `gen-locators` / `generateLocators(snapshot, target)` emit ready-to-use locator files for
-**Robot Framework**, **Playwright**, or **Cypress** (selector convention
-`[data-testid="<id>"]`).
+**Playwright** (`getByTestId`), **Cypress**, **WebdriverIO**, **Selenium (Python)**,
+**TestCafe**, or **Robot Framework** (selector convention `[data-testid="<id>"]`); any
+other runner can consume the framework-agnostic `gen-constants` module directly.
 
 ## What a real lifecycle looks like
 

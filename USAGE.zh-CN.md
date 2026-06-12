@@ -129,7 +129,7 @@ git diff 超出被打标组件文件范围时放弃选择性、升级全量;保�
 | --- | --- | --- |
 | `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]`(默认 `.html`)· `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter 自动选择:`.vue`→Vue;`.jsx`/`.tsx`→React(老式 `.js` JSX 用 `--ext .js --adapter react`);含 Angular 特征(`(event)=`、`*ngIf`……)的 `.html`→Angular;其余→HTML。`--check`:CI 闸门,零写盘,需打标则 exit 1。`--regenerate`:丢弃已写 id,按当前信号重铸 |
 | `diff <from> <to>` | — | markdown diff 到 stdout(字段级 + `symbol:` 变更) |
-| `gen-locators` | `--target robot\|playwright\|cypress`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
+| `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE`(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
 | `coverage` | `--tests DIR[,DIR]`(默认 `e2e`)· `--min N` · `--runtime FILE` | 已打标 id 被测试引用的覆盖率(总体 + 交互元素);`--min` 以交互覆盖率为闸门(低于则 exit 1);`--runtime` 合并运行时"行使"工件(引用 vs 行使 + 动态 id) |
 | `affected <from> <to>` | `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |

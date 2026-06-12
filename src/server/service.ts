@@ -10,7 +10,7 @@
  * multi-team testid authority.
  */
 import { ElementNode, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning, TagStats } from '../core';
-import { RegistryStorage, RegistrySnapshot, reconcile, diff, DiffResult, generateLocatorsSafe } from './_reexport';
+import { RegistryStorage, RegistrySnapshot, reconcile, diff, DiffResult, generateLocatorsSafe, LocatorTarget } from './_reexport';
 
 export interface TagRequest {
   nodes: ElementNode[];
@@ -74,7 +74,7 @@ export class TestIdService {
     return diff(a, b);
   }
 
-  async locators(target: 'robot' | 'playwright' | 'cypress', attributeName?: string): Promise<Record<string, string> | null> {
+  async locators(target: LocatorTarget, attributeName?: string): Promise<Record<string, string> | null> {
     const latest = await this.storage.loadLatest();
     if (!latest) return null;
     return generateLocatorsSafe(latest, target, attributeName);

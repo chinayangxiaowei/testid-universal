@@ -9,7 +9,7 @@
  *   testid tag <paths...> [--ext .html|.vue|.jsx,.tsx] [--adapter html|vue|angular|react] [--attr data-testid]
  *              [--registry DIR] [--server URL] [--regenerate] [--dry] [--check]
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
- *   testid gen-locators [--target robot|playwright|cypress] [--out DIR] [--registry DIR] [--server URL]
+ *   testid gen-locators [--target robot|playwright|cypress|webdriverio|selenium-python|testcafe] [--out DIR] [--registry DIR] [--server URL]
  *   testid gen-constants [--out FILE] [--registry DIR] [--server URL]
  *   testid affected <fromVersion> <toVersion> [--tests DIR[,DIR]] [--out-list FILE] [--registry DIR] [--server URL]
  *

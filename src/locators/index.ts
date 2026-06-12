@@ -9,7 +9,7 @@
  */
 import { RegistrySnapshot } from '../registry/storage';
 
-export type LocatorTarget = 'robot' | 'playwright' | 'cypress';
+export type LocatorTarget = 'robot' | 'playwright' | 'cypress' | 'webdriverio' | 'selenium-python' | 'testcafe';
 
 const DEFAULT_ATTR = 'data-testid';
 
@@ -45,16 +45,58 @@ function playwright(snapshot: RegistrySnapshot, attr: string): string {
   const lines = [
     '// Auto-generated Playwright locators. Do not edit by hand.',
     "import type { Page, Locator } from '@playwright/test';",
-    '',
-    'export const testIds = {',
   ];
+  if (attr !== DEFAULT_ATTR) {
+    lines.push(`// Requires playwright.config: use: { testIdAttribute: '${attr}' }`);
+  }
+  lines.push('', 'export const testIds = {');
   for (const id of sortedIds(snapshot)) lines.push(`  ${camelName(id)}: '${id}',`);
   lines.push('} as const;', '');
   lines.push('export const locators = (page: Page): Record<string, Locator> => ({');
   for (const id of sortedIds(snapshot)) {
-    lines.push(`  ${camelName(id)}: page.locator('[${attr}="${id}"]'),`);
+    lines.push(`  ${camelName(id)}: page.getByTestId(testIds.${camelName(id)}),`);
   }
   lines.push('});', '');
+  return lines.join('\n');
+}
+
+function webdriverio(snapshot: RegistrySnapshot, attr: string): string {
+  const lines = ['// Auto-generated WebdriverIO locators. Do not edit by hand.', '', 'export const testIds = {'];
+  for (const id of sortedIds(snapshot)) lines.push(`  ${camelName(id)}: '${id}',`);
+  lines.push('} as const;', '');
+  lines.push('export const locators = {');
+  for (const id of sortedIds(snapshot)) {
+    lines.push(`  ${camelName(id)}: () => $(\`[${attr}="\${testIds.${camelName(id)}}"]\`),`);
+  }
+  lines.push('};', '');
+  return lines.join('\n');
+}
+
+function seleniumPython(snapshot: RegistrySnapshot, attr: string): string {
+  const lines = [
+    '# Auto-generated Selenium locators. Do not edit by hand.',
+    'from selenium.webdriver.common.by import By',
+    '',
+  ];
+  for (const id of sortedIds(snapshot)) {
+    lines.push(`${constName(id)} = (By.CSS_SELECTOR, '[${attr}="${id}"]')`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+function testcafe(snapshot: RegistrySnapshot, attr: string): string {
+  const lines = [
+    '// Auto-generated TestCafe selectors. Do not edit by hand.',
+    "import { Selector } from 'testcafe';",
+    '',
+    'export const testIds = {',
+  ];
+  for (const id of sortedIds(snapshot)) lines.push(`  ${camelName(id)}: '${id}',`);
+  lines.push('};', '');
+  for (const id of sortedIds(snapshot)) {
+    lines.push(`export const ${camelName(id)} = Selector('[${attr}="${id}"]');`);
+  }
+  lines.push('');
   return lines.join('\n');
 }
 
@@ -73,6 +115,9 @@ const FILENAME: Record<LocatorTarget, string> = {
   robot: 'testids.resource',
   playwright: 'testids.locators.ts',
   cypress: 'testids.locators.js',
+  webdriverio: 'testids.locators.ts',
+  'selenium-python': 'testids.py',
+  testcafe: 'testids.locators.js',
 };
 
 /** Generate locator file(s) for a target. Returns { filename: content }. */
@@ -87,6 +132,9 @@ export function generateLocators(
     case 'robot': content = robot(snapshot, attr); break;
     case 'playwright': content = playwright(snapshot, attr); break;
     case 'cypress': content = cypress(snapshot, attr); break;
+    case 'webdriverio': content = webdriverio(snapshot, attr); break;
+    case 'selenium-python': content = seleniumPython(snapshot, attr); break;
+    case 'testcafe': content = testcafe(snapshot, attr); break;
     default: throw new Error(`unknown locator target: ${target as string}`);
   }
   return { [FILENAME[target]]: content };

@@ -5,7 +5,7 @@
  *   POST /tag            { nodes, config? }                  -> TagResponse
  *   GET  /registry/latest                                    -> RegistrySnapshot
  *   GET  /diff?from=1&to=2&threshold=0.8                     -> DiffResult
- *   GET  /locators?target=robot|playwright|cypress           -> { [file]: content }
+ *   GET  /locators?target=robot|playwright|cypress|webdriverio|selenium-python|testcafe -> { [file]: content }
  *
  * Uses only node:http so it runs anywhere Node runs, with nothing to install.
  * In production you'd put this behind Express/Fastify + auth — but the service
@@ -51,7 +51,7 @@ export function createApp(storage: RegistryStorage) {
         return d ? send(res, 200, d) : send(res, 404, { error: 'version not found' });
       }
       if (req.method === 'GET' && url.pathname === '/locators') {
-        const target = (url.searchParams.get('target') ?? 'robot') as 'robot' | 'playwright' | 'cypress';
+        const target = (url.searchParams.get('target') ?? 'robot') as import('../locators').LocatorTarget;
         const files = await service.locators(target, url.searchParams.get('attr') ?? undefined);
         return files ? send(res, 200, files) : send(res, 404, { error: 'no registry yet' });
       }
