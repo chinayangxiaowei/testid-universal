@@ -123,7 +123,7 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 | `diff <from> <to>` | — | markdown diff to stdout (field-level + `symbol:` changes) |
 | `gen-locators` | `--target robot\|playwright\|cypress` (default `robot`) · `--out DIR` (default `tests/locators`) · `--attr` | selector convention `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE` (default stdout) | throws on constant-name collision (fail-closed guarantee) |
-| `coverage` | `--tests DIR[,DIR]` (default `e2e`) · `--min N` | coverage of tagged ids by tests (overall + interactive); `--min` gates on the interactive percentage (exit 1 below) |
+| `coverage` | `--tests DIR[,DIR]` (default `e2e`) · `--min N` · `--runtime FILE` | coverage of tagged ids by tests (overall + interactive); `--min` gates on the interactive percentage (exit 1 below); `--runtime` merges an exercised-ids artifact (referenced vs exercised + dynamic ids) |
 | `affected <from> <to>` | `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
 
 Backend: `npm run serve` boots the REST shell (`PORT`, `REGISTRY_DIR` env vars).

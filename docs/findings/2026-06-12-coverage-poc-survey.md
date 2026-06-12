@@ -55,3 +55,18 @@ Honest weaknesses vs the runtime model:
 
 Both improvements recorded as backlog; neither blocks the current gate, which already
 closes the "green but untested" hole at the source level.
+
+## Implementation note (same day) — both borrowed increments landed and validated live
+
+1. **Interactive classification** now = tag semantics ∪ ARIA interactive roles ∪
+   `tabindex >= 0`. Acceptance on Conduit v14: the real `<i role="button">`
+   delete-comment icon (`articledetailcomment__i--emit`) — previously classified
+   non-interactive — now counts (interactive denominator 54 → 55, ⚠-flagged). It had
+   been TAGGED all along (role is a signal); only the coverage classifier missed it.
+2. **Runtime exercised coverage**: zero-dep `createTestIdRecorder()` (wraps any
+   page-like `getByTestId`, parallel-safe line artifact) + `coverage --runtime FILE`.
+   Validated on the live Conduit Playwright suite: 3 real tests recorded 8 exercised
+   ids; the report now answers three tiers — referenced (5), referenced-but-never-
+   exercised (0), and **exercised dynamic ids outside the registry (3:
+   `article-preview-article-{1,2}`, `pop-tag-vue`)** — closing the dynamic-bound-id
+   blind spot that static scanning cannot see.
