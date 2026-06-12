@@ -123,3 +123,33 @@ not portable (BSD ls/sort), so lexicographic order put `testids.v9.json` last fo
 Caught because Y14's "diff" output didn't match its tag stats; recomputed all 31 diffs
 from explicit version filenames. Same family as the earlier wrong-branch incident:
 scripted measurement must derive inputs explicitly, never from listing order.
+
+## Closing the loop: test-case routing + coverage (the part the diffs alone don't show)
+
+A realistic Playwright suite (6 specs consuming `gen-constants` output, committed on
+`y-ours`) was routed through `testid affected <v> <v+1> --tests e2e` for all 31 steps.
+Steps that demanded test-case work:
+
+| Step | write-new | retire | re-test | Files routed to re-test |
+| --- | ---: | ---: | ---: | --- |
+| Y7 prettier | 1 | 1 | 1 | (ngclass expression) |
+| Y8 pagination | 3 | 4 | 0 | — removed `setListTo` ids: their constants vanish → **compile error TS2339** (fail-closed demo verified) |
+| **Y12 zoneless** | 0 | 0 | 1 | **profile.spec.ts** (via `symbol:onToggleFollowing`) |
+| Y14 signals | 2 | 3 | 27 | article, auth, navigation, profile, settings |
+| Y19 navbar | 5 | 0 | 0 | new elements → write-new |
+| Y20 errors | 6 | 4 | 9 | article, profile |
+| Y23 img pipe | 0 | 0 | 3 | article, navigation, profile |
+| Y24 name attrs | 0 | 0 | 11 | auth, editor, settings |
+| Y26 logo | 0 | 0 | 2 | navigation |
+| Y27 home copy | 2 | 2 | 0 | — |
+| **Y31 password fix** | 0 | 0 | 1 | **settings.spec.ts** — which contains the exact test asserting the fixed behavior ("password left empty keeps the old password"); routed via `symbol:submitForm`. (Computed on a fix-replay registry: the year registry predates the export-default fix, so v31→v32 stores no symbol baseline.) |
+
+The other 20 steps routed zero test work — quiet steps stay quiet end-to-end.
+`--out-list` emits the file list for the runner (`npx playwright test $(cat retest.txt)`);
+actually executing the suite needs the app built and served, which is out of scope here.
+
+Coverage (year-end snapshot + suite): 41/86 tagged ids referenced (47.7%);
+**interactive coverage 34/57 (59.6%)**; the ⚠ table lists the uncovered interactive
+elements (banner duplicates, nav links) as the next work list. The repo's own e2e tests
+(realworld submodule era) reference no testids at all — adoption would start at 0% and
+ratchet with `--min`.
