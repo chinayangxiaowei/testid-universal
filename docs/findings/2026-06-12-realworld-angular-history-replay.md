@@ -85,3 +85,41 @@ Honest residuals: pipe names are not tracked as L2 symbols (a `defaultImage`
 implementation edit still goes unseen — same class as the L3 transitive boundary;
 recorded, not built). Registries written before this fix will flag a one-time
 `attr:*` wave on their first re-tag — over-flag is the safe direction.
+
+## One-year replay (branches `y-ours` / `y-orig`, 31 real commits)
+
+Same method, bigger window: base `a6f16d0^` (tree of 2024-12), then every upstream
+commit touching `src/` through HEAD `dd99ed2` (2026-05-13) — Angular 19/20/21 upgrades,
+a whole-repo prettier reformat, the zoneless migration, the signals rewrite, service
+refactors, and two pure-`.ts` behavior fixes. 31 measured steps per tool.
+
+| Event (selected) | Original | Ours |
+| --- | --- | --- |
+| Y1–Y6, Y9–Y13, Y15–Y18, Y21–Y22, Y25, Y28–Y30 (upgrades, lint, urls, service tests, styles) | quiet | quiet — 20 of 31 steps are zero-noise on both sides |
+| Y7 prettier reformat | modified=3 | merge destroyed 34 of 76 written tags → deterministic re-mint restored identical ids; net 1/1/1 |
+| **Y12 zoneless (`.ts` only)** | **0 — structurally blind** | **`symbol:onToggleFollowing` → 1 modified** |
+| Y14 signals rewrite | modified=64, added/removed=14/14 (id churn) | modified=27 (all field-attributed `attr:*`/`bound_identifiers`/`symbol:*`), added/removed=3/3, **0 sticky ids moved** despite 35 tags destroyed in the merge |
+| Y19 navbar | added=20, renamed=10 (fuzzy) | added=6, nothing else |
+| Y23 nullable img (pipe) | modified=1 (+1/3 add/remove) | 3 × `attr:[src]`, ids frozen |
+| **Y31 empty-password fix (`.ts` only)** | **0** | **`settings__form--submitform` · `symbol:submitForm` → 1** (after the export-default fix below) |
+| Collisions | 75→101 unresolvable duplicates all year | 0 duplicates all year |
+
+The two pure-behavior fixes (Y12, Y31) are the project thesis on real history: the id
+never changed, the template never changed, and only the source-dependency map produced
+the re-test trigger. The original tool cannot represent this signal class at all.
+
+### Second gap found and fixed (Y31)
+
+`export default class SettingsComponent` — `resolveSymbolDefs` only unwrapped
+`ExportNamedDeclaration`, so every member of a default-exported component class was
+invisible to L2; the `submitForm()` body fix produced no trigger. Fixed in `2bff850`
+(unwrap `ExportDefaultDeclaration` too, TDD), revalidated by replaying Y30→Y31: exactly
+one modified, `symbol:submitForm`.
+
+### Tooling lesson
+
+The orig-side diff loop silently compared stale versions after v9: `ls | sort -V` is
+not portable (BSD ls/sort), so lexicographic order put `testids.v9.json` last forever.
+Caught because Y14's "diff" output didn't match its tag stats; recomputed all 31 diffs
+from explicit version filenames. Same family as the earlier wrong-branch incident:
+scripted measurement must derive inputs explicitly, never from listing order.
