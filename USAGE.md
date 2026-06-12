@@ -141,9 +141,10 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 | `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]` (default `.html`) · `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter auto-picked: `.vue` → Vue; `.jsx`/`.tsx` → React (legacy `.js` JSX: pass `--ext .js --adapter react`); `.html` with Angular markers (`(event)=`, `*ngIf`, …) → Angular; else HTML. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals |
 | `diff <from> <to>` | — | markdown diff to stdout (field-level + `symbol:` changes) |
 | `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe` (default `robot`) · `--out DIR` (default `tests/locators`) · `--attr` | selector convention `[data-testid="<id>"]` |
-| `gen-constants` | `--out FILE` (default stdout) | throws on constant-name collision (fail-closed guarantee) |
+| `gen-constants` | `--out FILE` · `--check` (CI gate: exit 1 if the committed module is missing/stale vs the latest registry) (default stdout) | throws on constant-name collision (fail-closed guarantee) |
+| `mark-green` | `--since FILE` (default `.testids-green.json`) | records the latest registry version as the re-test anchor; run it after the selective suite passes. `affected --since FILE` then always diffs last-green -> latest |
 | `coverage` | `--tests DIR[,DIR]` (default `e2e`) · `--min N` · `--runtime FILE` | coverage of tagged ids by tests (overall + interactive); `--min` gates on the interactive percentage (exit 1 below); `--runtime` merges an exercised-ids artifact (referenced vs exercised + dynamic ids) |
-| `affected <from> <to>` | `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
+| `affected <from> <to>` (or `--since FILE`) | `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
 
 Backend: `npm run serve` boots the REST shell (`PORT`, `REGISTRY_DIR` env vars).
 
@@ -244,3 +245,10 @@ value so it can only go up; (3) trust the denominator before the ratio — a fix
 makes the denominator more honest will LOWER the percentage (here: 59.6% → 54.7% when
 wired-but-unnamed components started counting), and that is progress, not regression.
 Recalibrate `--min` after upgrading, don't revert.
+
+**I tagged a subdirectory and feared everything else got retired.**
+It does not (since the scoped-reconcile fix): an absent id is retired only when its
+recorded source file was actually parsed in that run; entries from files outside the run
+are carried forward untouched, and the CLI prints how many. One caveat: registries
+written before this fix have no file scope recorded — run ONE full tag to upgrade them,
+then partial runs are safe.

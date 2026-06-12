@@ -130,9 +130,10 @@ git diff 超出被打标组件文件范围时放弃选择性、升级全量;保�
 | `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]`(默认 `.html`)· `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter 自动选择:`.vue`→Vue;`.jsx`/`.tsx`→React(老式 `.js` JSX 用 `--ext .js --adapter react`);含 Angular 特征(`(event)=`、`*ngIf`……)的 `.html`→Angular;其余→HTML。`--check`:CI 闸门,零写盘,需打标则 exit 1。`--regenerate`:丢弃已写 id,按当前信号重铸 |
 | `diff <from> <to>` | — | markdown diff 到 stdout(字段级 + `symbol:` 变更) |
 | `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
-| `gen-constants` | `--out FILE`(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
+| `gen-constants` | `--out FILE` · `--check`(CI 闸:已提交的常量模块缺失或落后于注册表最新版时 exit 1)(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
+| `mark-green` | `--since FILE`(默认 `.testids-green.json`)| 把注册表最新版本记为重测锚点;选择性重测通过后执行。之后 `affected --since FILE` 恒为 上次绿 -> 最新 的 diff |
 | `coverage` | `--tests DIR[,DIR]`(默认 `e2e`)· `--min N` · `--runtime FILE` | 已打标 id 被测试引用的覆盖率(总体 + 交互元素);`--min` 以交互覆盖率为闸门(低于则 exit 1);`--runtime` 合并运行时"行使"工件(引用 vs 行使 + 动态 id) |
-| `affected <from> <to>` | `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |
+| `affected <from> <to>`(或 `--since FILE`)| `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |
 
 后端:`npm run serve` 启动 REST 外壳(`PORT`、`REGISTRY_DIR` 环境变量)。
 
@@ -224,3 +225,8 @@ import 符号的实现体(只哈希 import 语句)。这正是周期性全量存
 锁到新实测值,只许升不许降;(3)先信分母再信比例——让分母更诚实的修复会**降低**
 百分比(本项目实例:挂 handler 的组件纳入分母后 59.6% → 54.7%),这是进步不是回归。
 升级后应重新校准 `--min`,而不是回退。
+
+**我只打标了一个子目录,其它条目会不会全被退役?**
+不会(作用域 reconcile 修复后):缺席的 id 只有在其源文件确实被本次解析时才退役;
+本次范围之外的条目原样携带,CLI 会打印携带数量。唯一注意:修复前写入的存量注册表
+没有记录文件作用域——先全量跑一次 tag 完成升级,之后部分打标即安全。

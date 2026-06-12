@@ -10,8 +10,9 @@
  *              [--registry DIR] [--server URL] [--regenerate] [--dry] [--check]
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
  *   testid gen-locators [--target robot|playwright|cypress|webdriverio|selenium-python|testcafe] [--out DIR] [--registry DIR] [--server URL]
- *   testid gen-constants [--out FILE] [--registry DIR] [--server URL]
- *   testid affected <fromVersion> <toVersion> [--tests DIR[,DIR]] [--out-list FILE] [--registry DIR] [--server URL]
+ *   testid gen-constants [--out FILE] [--check] [--registry DIR] [--server URL]
+ *   testid affected <fromVersion> <toVersion> | --since FILE  [--tests DIR[,DIR]] [--out-list FILE] [--registry DIR] [--server URL]
+ *   testid mark-green [--since FILE] [--registry DIR] [--server URL]   (record latest version as the re-test anchor)
  *
  * The adapter is picked from the matched files (.vue -> VueAdapter, else HTML);
  * --adapter overrides. Mixed .vue/non-.vue runs must be split (or use --adapter).
@@ -130,6 +131,9 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
   const st = result.stats;
   console.log(`tagging coverage: ${st.tagged}/${st.elements} parsed elements tagged` +
     ` (${st.skipped_no_signal} no-signal, ${st.skipped_policy} policy-skipped)`);
+  if (result.outOfScope > 0) {
+    console.log(`note: partial run -- ${result.outOfScope} registry entr(ies) from files outside this run carried forward, not retired`);
+  }
 }
 
 async function cmdDiff(positional: string[], flags: Record<string, string | boolean>) {
@@ -158,6 +162,19 @@ async function cmdGenConstants(flags: Record<string, string | boolean>) {
   const snap = await transport.latest();
   if (!snap) { console.error('no registry yet'); process.exit(2); }
   const out = generateConstants(snap);
+  if (flags.check) {
+    // CI gate: writes nothing; exit 1 when the committed constants module is
+    // missing or stale relative to the latest registry version.
+    const target = flags.out as string;
+    if (!target) { console.error('--check requires --out <file> (the committed constants module)'); process.exit(2); }
+    let current: string | null = null;
+    try { current = readFileSync(target, 'utf8'); } catch { /* missing */ }
+    if (current === out) { console.log(`constants up to date (${target}, registry v${snap.version})`); return; }
+    console.error(current == null
+      ? `constants module missing: ${target} -- run gen-constants`
+      : `constants module stale: ${target} does not match registry v${snap.version} -- re-run gen-constants and commit`);
+    process.exit(1);
+  }
   if (flags.out) {
     writeFileSync(flags.out as string, out);
     console.log(`wrote ${flags.out}`);
@@ -192,9 +209,27 @@ async function cmdCoverage(flags: Record<string, string | boolean>) {
   }
 }
 
+function readSinceFile(path: string): { version: number } | null {
+  try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
+}
+
 async function cmdAffected(positional: string[], flags: Record<string, string | boolean>) {
   const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
-  const from = Number(positional[0]), to = Number(positional[1]);
+  let from = Number(positional[0]), to = Number(positional[1]);
+  if (flags.since) {
+    // State-anchored mode: diff from the last green version to the latest.
+    const state = readSinceFile(flags.since as string);
+    if (!state || typeof state.version !== 'number') {
+      console.error(`no usable since-file at ${flags.since} -- create it with: testid mark-green --since ${flags.since}`);
+      process.exit(2);
+    }
+    const latest = await transport.latest();
+    if (!latest) { console.error('no registry yet'); process.exit(2); }
+    from = state.version;
+    to = latest.version;
+    if (from === to) { console.log(`nothing new: registry is still at v${from} (last green)`); return; }
+    console.log(`affected since last green: v${from} -> v${to}`);
+  }
   const d = await transport.diff(from, to);
   if (!d) { console.error('versions not found'); process.exit(2); }
 
@@ -213,6 +248,15 @@ async function cmdAffected(positional: string[], flags: Record<string, string | 
   }
 }
 
+async function cmdMarkGreen(flags: Record<string, string | boolean>) {
+  const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
+  const sinceFile = (flags.since as string) ?? '.testids-green.json';
+  const latest = await transport.latest();
+  if (!latest) { console.error('no registry yet'); process.exit(2); }
+  writeFileSync(sinceFile, JSON.stringify({ version: latest.version, marked_at: new Date().toISOString() }, null, 2) + '\n');
+  console.log(`marked v${latest.version} as green (${sinceFile})`);
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positional, flags } = parseArgs(rest);
@@ -223,8 +267,9 @@ async function main() {
     case 'gen-constants': return cmdGenConstants(flags);
     case 'affected': return cmdAffected(positional, flags);
     case 'coverage': return cmdCoverage(flags);
+    case 'mark-green': return cmdMarkGreen(flags);
     default:
-      console.log('usage: testid <tag|diff|gen-locators|gen-constants|affected|coverage> [...]  (add --server <url> to use a remote backend)');
+      console.log('usage: testid <tag|diff|gen-locators|gen-constants|affected|coverage|mark-green> [...]  (add --server <url> to use a remote backend)');
       process.exit(cmd ? 2 : 0);
   }
 }
