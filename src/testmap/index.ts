@@ -58,8 +58,14 @@ export function affectedTestsToMarkdown(affected: AffectedTest[]): string {
   return L.join('\n') + '\n';
 }
 
-/** Heuristic: element types a test is likely to target (the "test-worthy" surface). */
-const INTERACTIVE_TYPE = /(input|button|select|textarea|form|link|checkbox)/i;
+/**
+ * Heuristic: element types a test is likely to target (the "test-worthy" surface).
+ * Substrings cover component-library naming (v-btn, el-switch, q-toggle, …);
+ * `tab` is guarded against `table`. Name-matching is the WEAKEST criterion —
+ * code wiring (handlers, form bindings) is checked first in isInteractive.
+ */
+const INTERACTIVE_TYPE =
+  /(input|button|btn|select|textarea|form|link|checkbox|radio|switch|toggle|slider|picker|dropdown|menu|search|field|option|tab(?!le))/i;
 
 /** Explicit ARIA interactive roles (per WAI-ARIA / the Cypress UI Coverage definition). */
 const INTERACTIVE_ROLES = new Set([
@@ -68,10 +74,13 @@ const INTERACTIVE_ROLES = new Set([
 ]);
 
 /**
- * Interactive = tag semantics OR an explicit ARIA interactive role OR tabindex >= 0.
- * (A <i role="button"> or a focusable <div> is test-worthy even though its tag is not.)
+ * Interactive = code wiring (handlers / form binding) OR tag semantics OR an
+ * explicit ARIA interactive role OR tabindex >= 0. Wiring is checked first:
+ * an element with a click handler is test-worthy no matter what it is called.
  */
 function isInteractive(e: RegistryEntry): boolean {
+  if (Object.keys(e.signals?.event_handlers ?? {}).length > 0) return true;
+  if (e.signals?.form_control) return true;
   if (INTERACTIVE_TYPE.test(e.element_type)) return true;
   const role = e.signals?.role;
   if (role && INTERACTIVE_ROLES.has(role.toLowerCase())) return true;

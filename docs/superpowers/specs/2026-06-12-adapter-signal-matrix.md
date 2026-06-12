@@ -50,3 +50,14 @@ from the interactive-coverage denominator. All adapters now pass static `tabinde
 through (parity-tested). Coverage itself stays core-owned (engine tag stats,
 `src/testmap/` static report, `src/runtime/` recorder); adapters only feed the
 denominator — which is precisely why their mappings need this audit gate.
+
+Follow-up 2 (triggered by "what about Vue component libraries?"): the interactive
+heuristic matched only `input|button|select|textarea|form|link|checkbox` as substrings,
+so `v-btn`, `el-switch`, `q-toggle`, `el-date-picker` and every custom component
+without those words fell out of the test-worthy denominator. Fixed in two layers:
+**code wiring now beats name guessing** (any `event_handlers` entry or a
+`form_control` binding ⇒ interactive, regardless of tag name), and the substring set
+covers component-library naming (btn/radio/switch/toggle/slider/picker/dropdown/menu/
+search/field/option/tab-not-table). Real-data effect on the year registry: interactive
+denominator 57 → 64, ratio honestly down 59.6% → 54.7%. `customTagMap` remains the
+precise opt-in for naming-only components with no wiring.

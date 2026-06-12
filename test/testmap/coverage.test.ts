@@ -66,3 +66,32 @@ describe('coverageReport with runtime exercised ids', () => {
     expect(r.runtime!.referencedNotExercised).toEqual(['login__button--save']);
   });
 });
+
+describe('isInteractive denominator (component-library reality)', () => {
+  const entry = (over: any) => ({
+    id: 'x', identity: 'x', component: 'c', element_type: over.element_type ?? 'element_div',
+    signals: { event_handlers: {}, bound_identifiers: {}, static_attributes: {}, ...over.signals },
+  }) as any;
+  const snap = (entries: any[]) => ({ version: 1, generated_at: '', entries }) as any;
+
+  it('an element with any event handler is interactive regardless of its tag name', () => {
+    const r = coverageReport(snap([entry({ element_type: 'element_articlepreview', signals: { event_handlers: { click: 'pick' } } })]), {});
+    expect(r.interactive.total).toBe(1);
+  });
+
+  it('a form-control binding (v-model on a custom component) is interactive', () => {
+    const r = coverageReport(snap([entry({ element_type: 'element_my-date-picker', signals: { form_control: 'birthday' } })]), {});
+    expect(r.interactive.total).toBe(1);
+  });
+
+  it('common component-library naming (btn/switch/radio/toggle/...) counts as interactive', () => {
+    const types = ['vuetify_btn', 'element_q-btn', 'element_el-switch', 'element_el-radio', 'element_q-toggle', 'element_el-slider', 'element_el-date-picker'];
+    const r = coverageReport(snap(types.map((t, i) => ({ ...entry({ element_type: t }), id: `x${i}`, identity: `x${i}` }))), {});
+    expect(r.interactive.total).toBe(types.length);
+  });
+
+  it('"tab" matching must not swallow "table"', () => {
+    const r = coverageReport(snap([entry({ element_type: 'element_table' })]), {});
+    expect(r.interactive.total).toBe(0);
+  });
+});
