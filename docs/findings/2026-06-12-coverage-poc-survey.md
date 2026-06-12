@@ -70,3 +70,22 @@ closes the "green but untested" hole at the source level.
    exercised (0), and **exercised dynamic ids outside the registry (3:
    `article-preview-article-{1,2}`, `pop-tag-vue`)** — closing the dynamic-bound-id
    blind spot that static scanning cannot see.
+
+## Coverage-driven simulation round (same day) — the new toolchain driving real work
+
+A full round on the live Conduit suite where every action was dictated by tool output,
+one commit per analysis step (`real-conduit` `testid-integration`, see its
+`COVERAGE-LOG.md`):
+
+| Commit | Tool signal acted on | Result |
+| --- | --- | --- |
+| C1 baseline | tag stats 97/216 tagged (111 no-signal); static 8.8% interactive; `--min 30` exit 1; runtime: 5 exercised, 3 dynamic | worklist derived from the ⚠ table |
+| C2 | top ⚠ cluster (register form, 5 ids) | register.spec → **17.5%**, 4 tests green |
+| C3 | next clusters (nav/footer links; favorite button interaction via mocked POST) | nav.spec + favorite-click → **22.8%**, 6 tests green |
+| C4 | achievable floor | gate frozen at `--min 20` (exit 0 now; ratchets coverage) |
+
+Throughout: referenced-but-never-exercised stayed **0** (the suite acts on everything it
+references) and the 3 dynamic bound ids stayed visible only via `--runtime` — exactly the
+division of labor the two coverage layers were designed for. Remaining ⚠ clusters
+(settings/editor/article-detail) are auth/route-gated and logged as deferred work, not
+silently dropped.
