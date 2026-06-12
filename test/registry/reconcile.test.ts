@@ -114,3 +114,71 @@ describe('reconcile', () => {
     expect(entries.map((e) => e.disambiguator).sort()).toEqual(['', '2']);
   });
 });
+
+describe('scoped reconcile (partial tag runs must not mass-retire)', () => {
+  const fileNode = (file: string, formControl: string) =>
+    node({ tag: 'input', signals: { form_control: formControl }, loc: { file, start: 0, end: 1 }, component: formControl });
+
+  it('an entry whose file is OUT of this run scope is carried forward, not retired', async () => {
+    const storage = new InMemoryStorage();
+    await reconcile(draftsFor(fileNode('a.vue', 'email'), fileNode('b.vue', 'phone')), storage, NOW, {
+      scopeFiles: new Set(['a.vue', 'b.vue']),
+    });
+    // Partial run: only a.vue tagged again.
+    const { snapshot: s2 } = await reconcile(draftsFor(fileNode('a.vue', 'email')), storage, NOW, {
+      scopeFiles: new Set(['a.vue']),
+    });
+    expect(s2.entries['phone__input--phone']).toBeDefined();
+    expect(s2.retired['phone__input--phone']).toBeUndefined();
+    const d = diff((await storage.loadVersion(1))!, s2);
+    expect(d.removed).toHaveLength(0);
+  });
+
+  it('an entry whose file IS in scope and whose element is gone still retires', async () => {
+    const storage = new InMemoryStorage();
+    await reconcile(draftsFor(fileNode('a.vue', 'email'), fileNode('a.vue', 'phone')), storage, NOW, {
+      scopeFiles: new Set(['a.vue']),
+    });
+    const { snapshot: s2 } = await reconcile(draftsFor(fileNode('a.vue', 'email')), storage, NOW, {
+      scopeFiles: new Set(['a.vue']),
+    });
+    expect(s2.entries['phone__input--phone']).toBeUndefined();
+    expect(s2.retired['phone__input--phone']).toBeDefined();
+  });
+
+  it('reports how many entries were carried as out-of-scope', async () => {
+    const storage = new InMemoryStorage();
+    await reconcile(draftsFor(fileNode('a.vue', 'email'), fileNode('b.vue', 'phone')), storage, NOW, {
+      scopeFiles: new Set(['a.vue', 'b.vue']),
+    });
+    const { outOfScope } = await reconcile(draftsFor(fileNode('a.vue', 'email')), storage, NOW, {
+      scopeFiles: new Set(['a.vue']),
+    });
+    expect(outOfScope).toBe(1);
+  });
+
+  it('legacy entries without a recorded file keep the old retire-on-absence behavior', async () => {
+    const storage = new InMemoryStorage();
+    // Simulate a pre-upgrade registry: entry without `file`.
+    await storage.save(snapshot(1, { 'legacy__input--x': entry({ fingerprint: 'f', identity: 'legacy::input::x' }) }));
+    const { snapshot: s2, outOfScope } = await reconcile(draftsFor(fileNode('a.vue', 'email')), storage, NOW, {
+      scopeFiles: new Set(['a.vue']),
+    });
+    expect(s2.retired['legacy__input--x']).toBeDefined();
+    expect(outOfScope).toBe(0);
+  });
+
+  it('a carried-forward entry re-tagged later is NOT misclassified as regenerated', async () => {
+    const storage = new InMemoryStorage();
+    await reconcile(draftsFor(fileNode('a.vue', 'email'), fileNode('b.vue', 'phone')), storage, NOW, {
+      scopeFiles: new Set(['a.vue', 'b.vue']),
+    });
+    await reconcile(draftsFor(fileNode('a.vue', 'email')), storage, NOW, { scopeFiles: new Set(['a.vue']) });
+    const { snapshot: s3 } = await reconcile(draftsFor(fileNode('a.vue', 'email'), fileNode('b.vue', 'phone')), storage, NOW, {
+      scopeFiles: new Set(['a.vue', 'b.vue']),
+    });
+    expect(s3.entries['phone__input--phone'].generation_history).toEqual([1]);
+    const d = diff((await storage.loadVersion(2))!, s3);
+    expect(d.regenerated).toHaveLength(0);
+  });
+});

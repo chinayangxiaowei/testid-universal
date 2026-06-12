@@ -23,6 +23,8 @@ export interface RegistryEntry {
   disambiguator: string;
   symbol_defs: Record<string, string>;
   signals: NormalizedSignals;
+  /** Source file this element lives in (scopes partial tag runs). Absent on legacy entries. */
+  file?: string;
   source: 'generated' | 'manual' | 'sticky';
   first_seen_version: number;
   last_seen_version: number;

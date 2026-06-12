@@ -26,6 +26,8 @@ export interface TagResponse {
   overrides: string[];    // manual ids that shadowed generated ones
   warnings: Warning[];
   stats: TagStats;
+  /** Entries carried forward because their file was outside this (partial) run. */
+  outOfScope: number;
 }
 
 export class TestIdService {
@@ -47,7 +49,9 @@ export class TestIdService {
           }))
       : undefined;
     const { drafts, warnings, stats } = generate(req.nodes, config, prior);
-    const { snapshot, overrides } = await reconcile(drafts, this.storage);
+    // Scope = the files this request parsed; reconcile retires only within it.
+    const scopeFiles = new Set(req.nodes.map((n) => n.loc?.file).filter((f): f is string => f != null));
+    const { snapshot, overrides, outOfScope } = await reconcile(drafts, this.storage, undefined, { scopeFiles });
 
     const edits: Edit[] = drafts
       .filter((d) => d.loc)
@@ -60,6 +64,7 @@ export class TestIdService {
       overrides,
       warnings,
       stats,
+      outOfScope,
     };
   }
 

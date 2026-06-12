@@ -19,7 +19,7 @@ export async function runPipeline(
   files: { file: string; component: string; source: string }[],
   config?: Partial<CoreConfig>,
   opts?: { regenerate?: boolean },
-): Promise<{ tagged: TaggedFile[]; version: number; overrides: string[]; warnings: Warning[]; stats: TagStats }> {
+): Promise<{ tagged: TaggedFile[]; version: number; overrides: string[]; warnings: Warning[]; stats: TagStats; outOfScope: number }> {
   // 1. Parse every file into the shared IR (the only framework-aware step).
   const parsed = files.flatMap((f) => {
     const fileNodes = adapter.parse(f.source, f.file, f.component);
@@ -63,5 +63,5 @@ export async function runPipeline(
     after: adapter.write(f.source, editsByFile.get(f.file) ?? []),
   }));
 
-  return { tagged, version: resp.version, overrides: resp.overrides, warnings: resp.warnings, stats: resp.stats };
+  return { tagged, version: resp.version, overrides: resp.overrides, warnings: resp.warnings, stats: resp.stats, outOfScope: resp.outOfScope ?? 0 };
 }
