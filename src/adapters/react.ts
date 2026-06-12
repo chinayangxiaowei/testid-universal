@@ -192,6 +192,8 @@ export class ReactAdapter implements FrameworkAdapter {
         type: g('type'),
         role: g('role'),
       };
+      // Static tabindex is a coverage-denominator input (isInteractive), not identity.
+      if (attrs['tabindex'] != null) exprs['tabindex'] = attrs['tabindex'];
       if (Object.keys(exprs).length) signals.static_attributes = exprs;
       if (text) signals.text = text;
 

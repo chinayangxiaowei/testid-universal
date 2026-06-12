@@ -121,6 +121,8 @@ function normalize(node: VueNode): RawSignals {
     type: pick('type'),
     role: pick('role'),
   };
+  // Static tabindex is a coverage-denominator input (isInteractive), not identity.
+  if (attrs['tabindex'] != null) exprs['tabindex'] = attrs['tabindex'];
   if (Object.keys(exprs).length) signals.static_attributes = exprs;
   const text = directText(node);
   if (text) signals.text = text;

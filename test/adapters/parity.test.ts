@@ -77,3 +77,14 @@ describe('cross-adapter identity parity', () => {
     expect(vueKey('<button data-tid="ok">S</button>', 'button').source).toBe('explicit_key');
   });
 });
+
+describe('coverage denominator inputs (adapter-fed)', () => {
+  it('a static tabindex reaches static_attributes in every adapter (isInteractive depends on it)', () => {
+    const v = new VueAdapter().parse('<template><div tabindex="0">x</div></template>', 'A.vue', 'A')[0];
+    const a = new AngularAdapter().parse('<div tabindex="0">x</div>', 'a.component.html', 'a')[0];
+    const r = new ReactAdapter().parse('<div tabIndex="0">x</div>', 'A.tsx', 'A')[0];
+    for (const n of [v, a, r]) {
+      expect(normalizeSignals(n.signals).static_attributes['tabindex']).toBe('0');
+    }
+  });
+});
