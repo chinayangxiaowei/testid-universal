@@ -4,7 +4,7 @@
  * and returns `id -> [test files]`. Combined with a diff (see affectedTests) this
  * routes "id added/removed/changed" to the exact tests that must be revisited.
  */
-import { RegistrySnapshot } from '../registry/storage';
+import { RegistrySnapshot, RegistryEntry } from '../registry/storage';
 import { constNameForId } from '../locators';
 import { DiffResult } from '../registry/diff';
 
@@ -61,6 +61,24 @@ export function affectedTestsToMarkdown(affected: AffectedTest[]): string {
 /** Heuristic: element types a test is likely to target (the "test-worthy" surface). */
 const INTERACTIVE_TYPE = /(input|button|select|textarea|form|link|checkbox)/i;
 
+/** Explicit ARIA interactive roles (per WAI-ARIA / the Cypress UI Coverage definition). */
+const INTERACTIVE_ROLES = new Set([
+  'button', 'checkbox', 'radio', 'tab', 'textbox', 'link', 'menuitem', 'combobox',
+  'listbox', 'option', 'searchbox', 'slider', 'spinbutton', 'switch',
+]);
+
+/**
+ * Interactive = tag semantics OR an explicit ARIA interactive role OR tabindex >= 0.
+ * (A <i role="button"> or a focusable <div> is test-worthy even though its tag is not.)
+ */
+function isInteractive(e: RegistryEntry): boolean {
+  if (INTERACTIVE_TYPE.test(e.element_type)) return true;
+  const role = e.signals?.role;
+  if (role && INTERACTIVE_ROLES.has(role.toLowerCase())) return true;
+  const tabindex = e.signals?.static_attributes?.tabindex;
+  return tabindex != null && Number(tabindex) >= 0;
+}
+
 export interface UncoveredId { id: string; element_type: string; interactive: boolean }
 export interface CoverageReport {
   total: number;
@@ -83,7 +101,7 @@ export function coverageReport(snapshot: RegistrySnapshot, testMap: Record<strin
   const entries = Object.entries(snapshot.entries);
   for (const [id, e] of entries) {
     const isCovered = (testMap[id]?.length ?? 0) > 0;
-    const interactive = INTERACTIVE_TYPE.test(e.element_type);
+    const interactive = isInteractive(e);
     if (interactive) { iTotal++; if (isCovered) iCovered++; }
     if (isCovered) covered++;
     else uncovered.push({ id, element_type: e.element_type, interactive });

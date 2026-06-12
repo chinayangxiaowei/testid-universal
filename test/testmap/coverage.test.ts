@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { coverageReport, coverageToMarkdown } from '../../src/testmap';
 import { snapshot, entry } from '../helpers';
+import { normalizeSignals } from '../../src/core/signals';
 
 const snap = snapshot(1, {
   'login__button--save': entry({ fingerprint: 'A', identity: 'l::button::save', element_type: 'native_button' }),
@@ -28,3 +29,24 @@ describe('coverageToMarkdown', () => {
     expect(md).toContain('login__input--email');
   });
 });
+
+describe('interactive classification (semantics + ARIA role + tabindex)', () => {
+  const snap2 = snapshot(1, {
+    // The real Conduit case: <i role="button"> delete-comment icon.
+    'c__i--emit': entry({ fingerprint: 'A', identity: 'c::i::emit', element_type: 'element_i', signals: normalizeSignals({ role: 'button' }) }),
+    'c__div--focusable': entry({ fingerprint: 'B', identity: 'c::div::f', element_type: 'element_div', signals: normalizeSignals({ static_attributes: { tabindex: '0' } }) }),
+    'c__div--unfocusable': entry({ fingerprint: 'C', identity: 'c::div::u', element_type: 'element_div', signals: normalizeSignals({ static_attributes: { tabindex: '-1' } }) }),
+    'c__span--plain': entry({ fingerprint: 'D', identity: 'c::span::p', element_type: 'element_span' }),
+  });
+
+  it('counts ARIA-role and tabindex elements as interactive; plain spans not', () => {
+    const r = coverageReport(snap2, {});
+    expect(r.interactive.total).toBe(2); // role=button i + tabindex=0 div
+    const flags = Object.fromEntries(r.uncovered.map((u) => [u.id, u.interactive]));
+    expect(flags['c__i--emit']).toBe(true);
+    expect(flags['c__div--focusable']).toBe(true);
+    expect(flags['c__div--unfocusable']).toBe(false);
+    expect(flags['c__span--plain']).toBe(false);
+  });
+});
+
