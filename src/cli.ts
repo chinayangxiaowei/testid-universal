@@ -6,7 +6,7 @@
  * JSON files (just like the original tool). Add `--server <url>` and the exact
  * same commands run against a remote backend instead. Nothing else changes.
  *
- *   testid tag <paths...> [--ext .html|.vue] [--adapter html|vue] [--attr data-testid]
+ *   testid tag <paths...> [--ext .html|.vue|.jsx,.tsx] [--adapter html|vue|angular|react] [--attr data-testid]
  *              [--registry DIR] [--server URL] [--regenerate] [--dry] [--check]
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
  *   testid gen-locators [--target robot|playwright|cypress] [--out DIR] [--registry DIR] [--server URL]
@@ -25,6 +25,7 @@ import { FrameworkAdapter } from './adapters/contract';
 import { HtmlTemplateAdapter } from './adapters/html';
 import { VueAdapter } from './adapters/vue';
 import { AngularAdapter } from './adapters/angular';
+import { ReactAdapter } from './adapters/react';
 import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
 import { LocatorTarget, generateConstants } from './locators';
@@ -76,18 +77,21 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
   // cannot contain: (event)= / [prop]= / *ngIf / @if( / Angular vocabulary).
   const ANGULAR_MARKERS = /\(\w+\)=|\[[\w.()-]+\]=|\*ng(If|For|Switch)|@(if|for|switch|defer)\s*\(|formControlName|routerLink|<ng-(container|template)/;
   const vueCount = paths.filter((p) => p.endsWith('.vue')).length;
+  const reactCount = paths.filter((p) => /\.(jsx|tsx)$/.test(p)).length;
   const auto = vueCount === paths.length ? 'vue'
-    : vueCount > 0 ? 'mixed'
+    : reactCount === paths.length ? 'react'
+    : vueCount > 0 || reactCount > 0 ? 'mixed'
     : files.some((f) => ANGULAR_MARKERS.test(f.source)) ? 'angular' : 'html';
   const choice = (flags.adapter as string) ?? auto;
-  if (choice !== 'vue' && choice !== 'html' && choice !== 'angular') {
+  if (!['vue', 'html', 'angular', 'react'].includes(choice)) {
     console.error(choice === 'mixed'
-      ? 'mixed .vue and non-.vue files matched; run them separately or pass --adapter <html|vue|angular>'
-      : `unknown adapter "${choice}" (expected html, vue or angular)`);
+      ? 'mixed framework extensions matched; run them separately or pass --adapter <html|vue|angular|react>'
+      : `unknown adapter "${choice}" (expected html, vue, angular or react)`);
     process.exit(2);
   }
   const adapter: FrameworkAdapter = choice === 'vue' ? new VueAdapter()
-    : choice === 'angular' ? new AngularAdapter() : new HtmlTemplateAdapter();
+    : choice === 'angular' ? new AngularAdapter()
+    : choice === 'react' ? new ReactAdapter() : new HtmlTemplateAdapter();
 
   const config = flags.attr ? { attributeName: flags.attr as string } : undefined;
 
