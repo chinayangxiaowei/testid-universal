@@ -84,3 +84,14 @@ describe('diff (exact identity match)', () => {
     expect(diff(v1, v2).summary.unchanged).toBe(1);
   });
 });
+
+describe('static_attributes change attribution', () => {
+  it('names the changed catch-all key as attr:<key>', async () => {
+    const { diffSignals } = await import('../../src/registry/diff');
+    const { normalizeSignals } = await import('../../src/core/signals');
+    const a = normalizeSignals({ event_handlers: { click: 'save' }, static_attributes: { '[src]': 'p.image' } });
+    const b = normalizeSignals({ event_handlers: { click: 'save' }, static_attributes: { '[src]': 'p.image | defaultImage' } });
+    const changes = diffSignals(a, b);
+    expect(changes).toEqual([{ field: 'attr:[src]', old: 'p.image', new: 'p.image | defaultImage' }]);
+  });
+});

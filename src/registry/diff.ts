@@ -52,6 +52,12 @@ export function diffSignals(a: NormalizedSignals, b: NormalizedSignals): SignalC
   for (const field of Object.keys(am)) {
     if (am[field] !== bm[field]) changes.push({ field, old: am[field] || null, new: bm[field] || null });
   }
+  // static_attributes is the catch-all (raw binding expressions etc.) — report
+  // each changed key by name so "modified" is always attributable.
+  const aa = a.static_attributes, ba = b.static_attributes;
+  for (const k of [...new Set([...Object.keys(aa), ...Object.keys(ba)])].sort()) {
+    if (aa[k] !== ba[k]) changes.push({ field: `attr:${k}`, old: aa[k] ?? null, new: ba[k] ?? null });
+  }
   return changes;
 }
 
