@@ -24,6 +24,7 @@ import { runPipeline } from './client/pipeline';
 import { FrameworkAdapter } from './adapters/contract';
 import { HtmlTemplateAdapter } from './adapters/html';
 import { VueAdapter } from './adapters/vue';
+import { AngularAdapter } from './adapters/angular';
 import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
 import { LocatorTarget, generateConstants } from './locators';
@@ -66,21 +67,27 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
   const paths = walk(positional, exts);
   if (paths.length === 0) { console.error('no matching files'); process.exit(2); }
 
-  // Pick the adapter from the matched file set; --adapter overrides.
-  const vueCount = paths.filter((p) => p.endsWith('.vue')).length;
-  const choice = (flags.adapter as string)
-    ?? (vueCount === paths.length ? 'vue' : vueCount === 0 ? 'html' : 'mixed');
-  if (choice !== 'vue' && choice !== 'html') {
-    console.error(choice === 'mixed'
-      ? 'mixed .vue and non-.vue files matched; run them separately or pass --adapter <html|vue>'
-      : `unknown adapter "${choice}" (expected html or vue)`);
-    process.exit(2);
-  }
-  const adapter: FrameworkAdapter = choice === 'vue' ? new VueAdapter() : new HtmlTemplateAdapter();
-
   const files = paths.map((file) => ({
     file, component: componentOf(file), source: readFileSync(file, 'utf8'),
   }));
+
+  // Pick the adapter from the matched file set; --adapter overrides. Angular templates
+  // are .html too, so they are detected by content (markers that valid plain HTML
+  // cannot contain: (event)= / [prop]= / *ngIf / @if( / Angular vocabulary).
+  const ANGULAR_MARKERS = /\(\w+\)=|\[[\w.()-]+\]=|\*ng(If|For|Switch)|@(if|for|switch|defer)\s*\(|formControlName|routerLink|<ng-(container|template)/;
+  const vueCount = paths.filter((p) => p.endsWith('.vue')).length;
+  const auto = vueCount === paths.length ? 'vue'
+    : vueCount > 0 ? 'mixed'
+    : files.some((f) => ANGULAR_MARKERS.test(f.source)) ? 'angular' : 'html';
+  const choice = (flags.adapter as string) ?? auto;
+  if (choice !== 'vue' && choice !== 'html' && choice !== 'angular') {
+    console.error(choice === 'mixed'
+      ? 'mixed .vue and non-.vue files matched; run them separately or pass --adapter <html|vue|angular>'
+      : `unknown adapter "${choice}" (expected html, vue or angular)`);
+    process.exit(2);
+  }
+  const adapter: FrameworkAdapter = choice === 'vue' ? new VueAdapter()
+    : choice === 'angular' ? new AngularAdapter() : new HtmlTemplateAdapter();
 
   const config = flags.attr ? { attributeName: flags.attr as string } : undefined;
 

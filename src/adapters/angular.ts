@@ -1,0 +1,157 @@
+/**
+ * Angular adapter — AST-backed via @angular/compiler's parseTemplate (HANDOFF P2).
+ *
+ * Same shape as the Vue adapter: framework vocabulary maps into the closed RawSignals
+ * contract; identity/fingerprint/diff policy stays in core. @angular/compiler is an
+ * OPTIONAL peer dependency, lazily required. Opening-tag spans come from the AST
+ * (startSourceSpan), so '>' inside attribute expressions can never corrupt writes.
+ *
+ * L2 symbol resolution reads the companion `<name>.ts` next to the template
+ * (Angular's templateUrl convention) and slices class members / top-level
+ * declarations with @babel/parser; absent companion or parser, it degrades to null.
+ */
+import { existsSync, readFileSync } from 'node:fs';
+import { ElementNode, RawSignals } from '../core/types';
+import { FrameworkAdapter, applyTestIdEdits } from './contract';
+import { Edit } from '../server/service';
+
+type NgNode = any;
+
+function loadNgCompiler(): { parseTemplate: (src: string, url: string) => { nodes: NgNode[] } } {
+  try {
+    return require('@angular/compiler');
+  } catch {
+    throw new Error(
+      'AngularAdapter requires the optional peer dependency "@angular/compiler". Install it: npm i -D @angular/compiler',
+    );
+  }
+}
+
+/** First identifier path in a binding expression: "!form.valid" -> "form.valid". */
+function firstIdentifierPath(expr: string): string {
+  const m = /[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(expr);
+  return m ? m[0] : expr.trim();
+}
+
+/** Reduce a handler expression to its function name: "save($event)" -> "save". */
+function handlerName(expr: string): string {
+  const m = /^\s*([A-Za-z_$][\w$]*)\s*\(?/.exec(expr);
+  return m ? m[1] : expr.trim();
+}
+
+export class AngularAdapter implements FrameworkAdapter {
+  readonly name = 'angular';
+  customTagMap: Record<string, { short: string; long: string }> = {};
+
+  parse(source: string, file: string, component: string): ElementNode[] {
+    const { nodes } = loadNgCompiler().parseTemplate(source, file);
+    const out: ElementNode[] = [];
+
+    const visit = (n: NgNode, inLoop: boolean) => {
+      const ctor: string = n?.constructor?.name ?? '';
+      let loop = inLoop;
+      if (ctor.includes('Template')) {
+        // *ngFor desugars to a Template wrapper carrying templateAttrs.
+        if ((n.templateAttrs ?? []).some((a: any) => String(a.name).toLowerCase().startsWith('ngfor'))) loop = true;
+      } else if (ctor.includes('ForLoopBlock')) {
+        loop = true; // Angular 17+ @for block
+      } else if (ctor.includes('Element')) {
+        const tag: string = n.name;
+        if (tag !== 'ng-container' && tag !== 'ng-template') {
+          const attrs: Record<string, string> = {};
+          for (const a of n.attributes ?? []) attrs[String(a.name).toLowerCase()] = a.value ?? '';
+          const bound: Record<string, string> = {};
+          const events: Record<string, string> = {};
+          for (const i of n.inputs ?? []) bound[String(i.name).toLowerCase()] = firstIdentifierPath(i.value?.source ?? '');
+          for (const o of n.outputs ?? []) events[String(o.name).toLowerCase()] = handlerName(o.handler?.source ?? '');
+
+          // An author-bound [attr.data-testid] is the per-item loop fix: respect it.
+          const hasBoundTestid = (n.inputs ?? []).some((i: any) =>
+            ['data-testid', 'data-cy'].includes(String(i.name).toLowerCase()));
+
+          if (!hasBoundTestid) {
+            const text = (n.children ?? [])
+              .filter((c: any) => (c?.constructor?.name ?? '').includes('Text') && !(c?.constructor?.name ?? '').includes('Bound'))
+              .map((c: any) => String(c.value ?? ''))
+              .join('')
+              .trim();
+
+            const signals: RawSignals = {
+              explicit_key: attrs['data-tid'] ?? null,
+              form_control: attrs['formcontrolname'] ?? bound['ngmodel'] ?? attrs['name'] ?? null,
+              name: attrs['name'] ?? null,
+              route: attrs['routerlink'] ?? bound['routerlink'] ?? attrs['href'] ?? null,
+              event_handlers: events,
+              bound_identifiers: bound,
+              html_id: attrs['id'] ?? null,
+              aria_label: attrs['aria-label'] ?? null,
+              placeholder: attrs['placeholder'] ?? null,
+              type: attrs['type'] ?? null,
+              role: attrs['role'] ?? null,
+            };
+            if (text) signals.text = text;
+
+            out.push({
+              component,
+              tag,
+              signals,
+              existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
+              loc: { file, start: n.sourceSpan.start.offset, end: n.startSourceSpan.end.offset - 1 },
+              inLoop: loop,
+            });
+          }
+        }
+      }
+      const kids: NgNode[] = [
+        ...(n.children ?? []),
+        ...((n.branches ?? []).flatMap((b: any) => b.children ?? [])), // @if/@switch branches
+      ];
+      for (const c of kids) visit(c, loop);
+    };
+    for (const n of nodes) visit(n, false);
+    return out;
+  }
+
+  write(source: string, edits: Edit[]): string {
+    return applyTestIdEdits(source, edits);
+  }
+
+  /** L2 resolver over the companion `<name>.ts` (templateUrl convention). */
+  resolveSymbolDefs(names: string[], _source: string, file: string): Record<string, string | null> {
+    const result: Record<string, string | null> = {};
+    for (const n of names) result[n] = null;
+    const companion = file.replace(/\.html?$/i, '.ts');
+    if (companion === file || !existsSync(companion)) return result;
+    let ast: any[];
+    let content: string;
+    try {
+      content = readFileSync(companion, 'utf8');
+      const bp = require('@babel/parser') as { parse: (s: string, o?: any) => any };
+      ast = bp.parse(content, { sourceType: 'module', plugins: ['typescript', 'decorators-legacy'] }).program?.body ?? [];
+    } catch {
+      return result; // unreadable/unparsable companion: resolve nothing rather than wrong
+    }
+    const slice = (node: any) => content.slice(node.start, node.end);
+    const handleDecl = (node: any) => {
+      const decl = node.type === 'ExportNamedDeclaration' && node.declaration ? node.declaration : node;
+      if (decl.type === 'FunctionDeclaration' && decl.id && names.includes(decl.id.name)) {
+        result[decl.id.name] = slice(node);
+      } else if (decl.type === 'VariableDeclaration') {
+        for (const d of decl.declarations) {
+          if (d.id?.type === 'Identifier' && names.includes(d.id.name)) result[d.id.name] = slice(node);
+        }
+      } else if (decl.type === 'ImportDeclaration') {
+        for (const s of decl.specifiers ?? []) {
+          if (names.includes(s.local?.name)) result[s.local.name] = slice(node);
+        }
+      } else if (decl.type === 'ClassDeclaration') {
+        for (const m of decl.body?.body ?? []) {
+          const key = m.key;
+          if (key?.type === 'Identifier' && names.includes(key.name)) result[key.name] = slice(m);
+        }
+      }
+    };
+    for (const node of ast) handleDecl(node);
+    return result;
+  }
+}
