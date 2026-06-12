@@ -200,4 +200,15 @@ describe('generate', () => {
     expect(drafts[0].identity).toBe('login::span::span');
     expect(warnings.some((w) => w.code === 'unstable-identity')).toBe(true);
   });
+
+  it('reports tagging stats: tagged vs silently-skipped elements', () => {
+    const { stats } = generate([
+      node({ tag: 'input', signals: { form_control: 'email' } }),     // tagged
+      node({ tag: 'div', signals: {} }),                              // no signal -> skipped
+      node({ tag: 'h1', signals: { text: 'Title' } }),                // skipTags policy
+      node({ tag: 'svg', signals: { aria_label: 'icon' } }),          // ignoreTags policy
+    ], { ...cfg, ignoreTags: ['svg'] });
+    expect(stats).toEqual({ elements: 4, tagged: 1, skipped_no_signal: 1, skipped_policy: 2 });
+  });
 });
+

@@ -57,3 +57,58 @@ export function affectedTestsToMarkdown(affected: AffectedTest[]): string {
   }
   return L.join('\n') + '\n';
 }
+
+/** Heuristic: element types a test is likely to target (the "test-worthy" surface). */
+const INTERACTIVE_TYPE = /(input|button|select|textarea|form|link|checkbox)/i;
+
+export interface UncoveredId { id: string; element_type: string; interactive: boolean }
+export interface CoverageReport {
+  total: number;
+  covered: number;
+  ratio: number;
+  interactive: { total: number; covered: number; ratio: number };
+  uncovered: UncoveredId[];
+}
+
+/**
+ * Test coverage over the registry: which tagged ids are referenced by at least one
+ * test. "All diffs green" only proves consistency of what tests already reference;
+ * this report answers the adequacy question — and `uncovered` is the work list.
+ */
+export function coverageReport(snapshot: RegistrySnapshot, testMap: Record<string, string[]>): CoverageReport {
+  let covered = 0;
+  let iTotal = 0;
+  let iCovered = 0;
+  const uncovered: UncoveredId[] = [];
+  const entries = Object.entries(snapshot.entries);
+  for (const [id, e] of entries) {
+    const isCovered = (testMap[id]?.length ?? 0) > 0;
+    const interactive = INTERACTIVE_TYPE.test(e.element_type);
+    if (interactive) { iTotal++; if (isCovered) iCovered++; }
+    if (isCovered) covered++;
+    else uncovered.push({ id, element_type: e.element_type, interactive });
+  }
+  uncovered.sort((a, b) => (a.interactive === b.interactive ? a.id.localeCompare(b.id) : a.interactive ? -1 : 1));
+  return {
+    total: entries.length,
+    covered,
+    ratio: entries.length ? covered / entries.length : 1,
+    interactive: { total: iTotal, covered: iCovered, ratio: iTotal ? iCovered / iTotal : 1 },
+    uncovered,
+  };
+}
+
+export function coverageToMarkdown(r: CoverageReport): string {
+  const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+  const L = [
+    '# TestID coverage',
+    '',
+    `- all tagged ids referenced by tests: **${r.covered}/${r.total}** (${pct(r.ratio)})`,
+    `- interactive (test-worthy) ids covered: **${r.interactive.covered}/${r.interactive.total}** (${pct(r.interactive.ratio)})`,
+  ];
+  if (r.uncovered.length) {
+    L.push('', '## Uncovered (interactive first)', '| TestID | Type |', '| --- | --- |');
+    for (const u of r.uncovered) L.push(`| \`${u.id}\` | ${u.element_type}${u.interactive ? ' ⚠' : ''} |`);
+  }
+  return L.join('\n') + '\n';
+}

@@ -27,7 +27,7 @@ import { VueAdapter } from './adapters/vue';
 import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
 import { LocatorTarget, generateConstants } from './locators';
-import { buildTestMapForIds, affectedTests, affectedTestsToMarkdown } from './testmap';
+import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, coverageReport, coverageToMarkdown } from './testmap';
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
@@ -111,6 +111,9 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
     console.warn(`\n${result.warnings.length} identity warning(s):`);
     for (const w of result.warnings) console.warn(`  - ${w.message}`);
   }
+  const st = result.stats;
+  console.log(`tagging coverage: ${st.tagged}/${st.elements} parsed elements tagged` +
+    ` (${st.skipped_no_signal} no-signal, ${st.skipped_policy} policy-skipped)`);
 }
 
 async function cmdDiff(positional: string[], flags: Record<string, string | boolean>) {
@@ -147,19 +150,38 @@ async function cmdGenConstants(flags: Record<string, string | boolean>) {
   }
 }
 
+function loadTestFiles(flags: Record<string, string | boolean>): { file: string; source: string }[] {
+  const testDirs = ((flags.tests as string) ?? 'e2e').split(',');
+  return walk(testDirs, ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])
+    .map((file) => ({ file, source: readFileSync(file, 'utf8') }))
+    // The generated constants module contains every raw id by construction; scanning
+    // it would put it in every report. It is an artifact, not a test.
+    .filter((f) => !f.source.startsWith('// Auto-generated testid constants'));
+}
+
+async function cmdCoverage(flags: Record<string, string | boolean>) {
+  const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
+  const snap = await transport.latest();
+  if (!snap) { console.error('no registry yet'); process.exit(2); }
+  const report = coverageReport(snap, buildTestMap(loadTestFiles(flags), snap));
+  console.log(coverageToMarkdown(report));
+  if (flags.min !== undefined) {
+    const min = Number(flags.min);
+    const pct = report.interactive.ratio * 100;
+    if (pct < min) {
+      console.error(`interactive coverage ${pct.toFixed(1)}% is below --min ${min}`);
+      process.exit(1);
+    }
+  }
+}
+
 async function cmdAffected(positional: string[], flags: Record<string, string | boolean>) {
   const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
   const from = Number(positional[0]), to = Number(positional[1]);
   const d = await transport.diff(from, to);
   if (!d) { console.error('versions not found'); process.exit(2); }
 
-  const testDirs = ((flags.tests as string) ?? 'e2e').split(',');
-  const testPaths = walk(testDirs, ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
-  const testFiles = testPaths
-    .map((file) => ({ file, source: readFileSync(file, 'utf8') }))
-    // The generated constants module contains every raw id by construction; scanning
-    // it would route it into every re-test list. It is an artifact, not a test.
-    .filter((f) => !f.source.startsWith('// Auto-generated testid constants'));
+  const testFiles = loadTestFiles(flags);
 
   // The map must cover ids on BOTH sides of the diff (removed ids are absent from the
   // `to` snapshot), so it is built from the diff's own id set — works over any transport.
@@ -183,8 +205,9 @@ async function main() {
     case 'gen-locators': return cmdGenLocators(flags);
     case 'gen-constants': return cmdGenConstants(flags);
     case 'affected': return cmdAffected(positional, flags);
+    case 'coverage': return cmdCoverage(flags);
     default:
-      console.log('usage: testid <tag|diff|gen-locators|gen-constants|affected> [...]  (add --server <url> to use a remote backend)');
+      console.log('usage: testid <tag|diff|gen-locators|gen-constants|affected|coverage> [...]  (add --server <url> to use a remote backend)');
       process.exit(cmd ? 2 : 0);
   }
 }

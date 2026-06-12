@@ -60,6 +60,16 @@ export interface NormalizedSignals {
   static_attributes: Record<string, string>;
 }
 
+/** Per-run tagging statistics: how much of the parsed surface actually got ids. */
+export interface TagStats {
+  elements: number;
+  tagged: number;
+  /** Elements with no signal at all — silently untaggable; review or add data-tid. */
+  skipped_no_signal: number;
+  /** Elements excluded by ignoreTags/skipTags policy. */
+  skipped_policy: number;
+}
+
 export interface Warning {
   code: 'unstable-identity' | 'positional-disambiguator' | 'loop-multiplicity';
   element_type: string;

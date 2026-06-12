@@ -1,4 +1,4 @@
-import { ElementNode, EntryDraft, CoreConfig, Warning, PriorEntry } from './types';
+import { ElementNode, EntryDraft, CoreConfig, Warning, PriorEntry, TagStats } from './types';
 import { normalizeSignals } from './signals';
 import { classify } from './classify';
 import { slugify } from './semantic';
@@ -7,17 +7,17 @@ import { fingerprintOf } from './fingerprint';
 import { formatId } from './format';
 import { hashSymbolSources } from './sourcedeps';
 
-export function shouldTag(node: ElementNode, config: CoreConfig): boolean {
+function skippedByPolicy(node: ElementNode, config: CoreConfig): boolean {
   const tag = node.tag;
-  if (config.ignoreTags.includes(tag) || config.ignoreTags.includes(tag.toLowerCase())) return false;
+  if (config.ignoreTags.includes(tag) || config.ignoreTags.includes(tag.toLowerCase())) return true;
   // Copy-only presentation tags are skipped for fresh minting; an explicit key or an
   // already-written id (sticky) always wins, so nothing previously tagged is retired.
-  if (config.skipTags.includes(tag.toLowerCase()) && !node.existingId && !node.signals.explicit_key) {
-    return false;
-  }
+  return config.skipTags.includes(tag.toLowerCase()) && !node.existingId && !node.signals.explicit_key;
+}
+
+function hasAnySignal(node: ElementNode): boolean {
   if (node.existingId) return true;
-  const s = node.signals;
-  return Object.values(s).some((v) => {
+  return Object.values(node.signals).some((v) => {
     if (v == null) return false;
     if (typeof v === 'string') return v.trim() !== '';
     if (Array.isArray(v)) return v.length > 0;
@@ -25,7 +25,11 @@ export function shouldTag(node: ElementNode, config: CoreConfig): boolean {
   });
 }
 
-export interface GenerateResult { drafts: EntryDraft[]; warnings: Warning[] }
+export function shouldTag(node: ElementNode, config: CoreConfig): boolean {
+  return !skippedByPolicy(node, config) && hasAnySignal(node);
+}
+
+export interface GenerateResult { drafts: EntryDraft[]; warnings: Warning[]; stats: TagStats }
 
 interface Pre {
   node: ElementNode;
@@ -40,9 +44,12 @@ interface Pre {
 export function generate(nodes: ElementNode[], config: CoreConfig, prior?: PriorEntry[]): GenerateResult {
   const warnings: Warning[] = [];
   const pre: Pre[] = [];
+  const stats: TagStats = { elements: 0, tagged: 0, skipped_no_signal: 0, skipped_policy: 0 };
 
   for (const node of nodes) {
-    if (!shouldTag(node, config)) continue;
+    stats.elements++;
+    if (skippedByPolicy(node, config)) { stats.skipped_policy++; continue; }
+    if (!hasAnySignal(node)) { stats.skipped_no_signal++; continue; }
     const sig = normalizeSignals(node.signals);
     const { short, long } = classify(node.tag, sig, config);
     let key = selectIdentityKey(sig, node.tag);
@@ -119,7 +126,8 @@ export function generate(nodes: ElementNode[], config: CoreConfig, prior?: Prior
     taken.add(id);
     drafts.push({ id, sticky: false, disambiguator, ...common });
   }
-  return { drafts, warnings };
+  stats.tagged = drafts.length;
+  return { drafts, warnings, stats };
 }
 
 /**

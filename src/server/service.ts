@@ -9,7 +9,7 @@
  * Swap the storage for Postgres/Redis and this same service becomes a multi-repo,
  * multi-team testid authority.
  */
-import { ElementNode, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning } from '../core';
+import { ElementNode, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning, TagStats } from '../core';
 import { RegistryStorage, RegistrySnapshot, reconcile, diff, DiffResult, generateLocatorsSafe } from './_reexport';
 
 export interface TagRequest {
@@ -25,6 +25,7 @@ export interface TagResponse {
   edits: Edit[];          // what the adapter should write back into the source
   overrides: string[];    // manual ids that shadowed generated ones
   warnings: Warning[];
+  stats: TagStats;
 }
 
 export class TestIdService {
@@ -45,7 +46,7 @@ export class TestIdService {
             identity: e.identity, fingerprint: e.fingerprint, disambiguator: e.disambiguator ?? '',
           }))
       : undefined;
-    const { drafts, warnings } = generate(req.nodes, config, prior);
+    const { drafts, warnings, stats } = generate(req.nodes, config, prior);
     const { snapshot, overrides } = await reconcile(drafts, this.storage);
 
     const edits: Edit[] = drafts
@@ -58,6 +59,7 @@ export class TestIdService {
       edits,
       overrides,
       warnings,
+      stats,
     };
   }
 
