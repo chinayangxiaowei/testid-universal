@@ -76,7 +76,7 @@ Original tool (with `renamed` = fuzzy 0.8 match):
 S5 changed `[src]="p.image"` → `"p.image | defaultImage"` — rendering behavior changed,
 but we reported **0 modified** (the original caught 1): identity normalization keeps
 only the root identifier, and no adapter fed raw expression text anywhere. Fix
-(`c2cbc16`, `2422ad7` in main): both real adapters now write raw binding/handler
+(`c2cbc16`, `18215e4` in main): both real adapters now write raw binding/handler
 expressions into the `static_attributes` catch-all — which by contract feeds the
 fingerprint ONLY — and `diff` attributes each changed key as `attr:<key>`. Replayed
 S4→S5 with the fix: exactly 3 modified, all `attr:[src]`, ids untouched.
