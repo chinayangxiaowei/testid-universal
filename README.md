@@ -209,8 +209,9 @@ and remote are interchangeable: the same `TestIdService` sits behind a `LocalTra
 
 Dependencies point downward; the core depends on nothing but `node:crypto`. A new
 framework = one adapter implementing `parse`, `write`, and optionally
-`resolveSymbolDefs` (the L2 capability). Adapters today: **Vue** (AST-backed, full
-capability) and **HTML** (regex scanner, demo-grade); Angular/React exist as sketches.
+`resolveSymbolDefs` (the L2 capability). Adapters today: **Vue** and **Angular** (both AST-backed; Angular templates are
+content-sniffed automatically since they share the `.html` extension) and **HTML**
+(regex scanner, demo-grade); React exists as a sketch.
 
 ## Invariants
 

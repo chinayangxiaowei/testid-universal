@@ -17,7 +17,8 @@ way with `--ext .html`.
 ### 1.1 Install
 
 ```bash
-npm i -D testid-universal @vue/compiler-sfc   # compiler-sfc: optional peer, Vue projects only
+npm i -D testid-universal @vue/compiler-sfc   # optional peer, Vue projects only
+npm i -D @angular/compiler                    # optional peer, Angular projects only
 ```
 
 ### 1.2 First tagging run
@@ -136,7 +137,7 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 
 | Command | Flags | Notes |
 | --- | --- | --- |
-| `tag <paths...>` | `--ext .html\|.vue[,…]` (default `.html`) · `--adapter html\|vue` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter auto-picked from matched files; mixed sets rejected. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals |
+| `tag <paths...>` | `--ext .html\|.vue[,…]` (default `.html`) · `--adapter html\|vue\|angular` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter auto-picked: `.vue` → Vue; `.html` with Angular markers (`(event)=`, `*ngIf`, …) → Angular; else HTML. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals |
 | `diff <from> <to>` | — | markdown diff to stdout (field-level + `symbol:` changes) |
 | `gen-locators` | `--target robot\|playwright\|cypress` (default `robot`) · `--out DIR` (default `tests/locators`) · `--attr` | selector convention `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE` (default stdout) | throws on constant-name collision (fail-closed guarantee) |

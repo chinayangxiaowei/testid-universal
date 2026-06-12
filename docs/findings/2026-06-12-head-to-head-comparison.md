@@ -109,3 +109,26 @@ Angular markers → Angular; other `.html` → HTML; `--adapter` always wins. Fa
 (marker-free static templates) are harmless — both adapters parse those identically. The
 same sniffing doubles as companion-file pairing confirmation for L2 symbol resolution
 (`foo.component.html` ↔ `foo.component.ts` via `templateUrl` verification).
+
+## Full-fidelity rerun (real AngularAdapter, branch `cmp-ours-ng`)
+
+The Angular adapter (AST via `@angular/compiler` `parseTemplate`; content-sniffed
+automatically by the CLI) replaced the HTML proxy and the same 6-step stream was rerun:
+
+| Step | Ours with AngularAdapter |
+| --- | --- |
+| S0 | 13/23 tagged; **unstable warnings 6 → 3** (Edit/Delete buttons and both forms now handler-keyed: `users__button--edit` via `(click)="edit(u)"`, `login__form--onsubmit`; the remaining 3 are genuinely wiring-less buttons); loop warnings 2 (scoped to the actionable in-loop buttons) |
+| S1 copy ×2 | churn 0; modified=1 field-level (original: 7) — the precision result REPRODUCES at full fidelity |
+| S2–S5 | added/removed exactly mirror the events; S4 stays deterministic add+remove vs the original's fuzzy renamed=1; S5 adds with no collision |
+
+Notes: the surface difference vs the original's 23/23 is now purely policy
+(`skipTags` + signal-less elements, accounted by tag stats), not capability. `{{ }}`
+interpolations are BoundText in the Angular AST and are deliberately not treated as
+static text (one fewer text-keyed td than the proxy run). L2 symbol resolution had no
+companion `.ts` files in this venue — exercised by unit tests instead (class members,
+top-level consts, imports, missing-companion degrade).
+
+Operational lesson recorded: the first rerun attempt silently executed on the WRONG
+branch because a leftover uncommitted registry blocked `git checkout -b` mid-script —
+the contaminated commits were reset away and the loop rerun from a verified-clean
+branch. Scripted git work must assert the branch after checkout, not assume it.

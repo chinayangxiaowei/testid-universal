@@ -15,7 +15,8 @@
 ### 1.1 安装
 
 ```bash
-npm i -D testid-universal @vue/compiler-sfc   # compiler-sfc:可选 peer,仅 Vue 项目需要
+npm i -D testid-universal @vue/compiler-sfc   # 可选 peer,仅 Vue 项目需要
+npm i -D @angular/compiler                    # 可选 peer,仅 Angular 项目需要
 ```
 
 ### 1.2 首次打标
@@ -125,7 +126,7 @@ git diff 超出被打标组件文件范围时放弃选择性、升级全量;保�
 
 | 命令 | 参数 | 说明 |
 | --- | --- | --- |
-| `tag <paths...>` | `--ext .html\|.vue[,…]`(默认 `.html`)· `--adapter html\|vue` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter 按匹配文件自动选择;混合集合报错。`--check`:CI 闸门,零写盘,需打标则 exit 1。`--regenerate`:丢弃已写 id,按当前信号重铸 |
+| `tag <paths...>` | `--ext .html\|.vue[,…]`(默认 `.html`)· `--adapter html\|vue\|angular` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter 自动选择:`.vue`→Vue;含 Angular 特征(`(event)=`、`*ngIf`……)的 `.html`→Angular;其余→HTML。`--check`:CI 闸门,零写盘,需打标则 exit 1。`--regenerate`:丢弃已写 id,按当前信号重铸 |
 | `diff <from> <to>` | — | markdown diff 到 stdout(字段级 + `symbol:` 变更) |
 | `gen-locators` | `--target robot\|playwright\|cypress`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE`(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
