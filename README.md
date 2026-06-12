@@ -171,7 +171,7 @@ The full CI recipe (gates, selective execution, the full-run fallback rule) is i
 `docs/superpowers/specs/2026-06-11-ci-integration-design.md`.
 
 The adapter is picked from the matched files (`.vue` → `VueAdapter`, otherwise HTML);
-`--adapter <html|vue>` overrides, and mixed runs are rejected with a clear error. Embedded
+`--adapter <html|vue|angular>` overrides, and mixed runs are rejected with a clear error. Embedded
 and remote are interchangeable: the same `TestIdService` sits behind a `LocalTransport`
 (in-process) or `HttpTransport` (REST), and calling code is identical.
 
@@ -198,7 +198,7 @@ and remote are interchangeable: the same `TestIdService` sits behind a `LocalTra
 
 | Layer | Files | Framework-aware? |
 | --- | --- | --- |
-| Adapters | `src/adapters/{contract,html,vue,sketches}.ts` | **yes — only here** |
+| Adapters | `src/adapters/{contract,html,vue,angular,sketches}.ts` | **yes — only here** |
 | Core engine | `src/core/{types,signals,identity,fingerprint,classify,format,sourcedeps,engine}.ts` | no (pure) |
 | Registry | `src/registry/{storage,registry,diff}.ts` | no |
 | Locators & constants | `src/locators/` | no |
@@ -232,12 +232,12 @@ content-sniffed automatically since they share the `.html` extension) and **HTML
   options API / plain `<script>` resolve name-only.
 - `JsonFileStorage` is last-write-wins (no locking/auth) — fine embedded, use a
   transactional storage for a shared service.
-- The HTML adapter is a regex scanner; Angular/React adapters are not yet implemented.
+- The HTML adapter is a regex scanner; the React adapter is not yet implemented.
 
 ## Development
 
 ```bash
-npm test            # vitest (107 tests)
+npm test            # vitest (135 tests)
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 npm run demo        # HTML end-to-end demo
