@@ -110,6 +110,23 @@ keep honest: selective execution only when the git diff is confined to tagged co
 files; keep a nightly/post-merge full run (transitive code changes are invisible to the
 registry by design).
 
+### 1.7 The coverage-driven loop (validated methodology)
+
+Never write tests by intuition alone — let the tool outputs drive the work, one commit
+per signal acted on:
+
+1. **Baseline**: `tag` (read the stats: how much of the parsed surface even has ids),
+   `coverage` (the ⚠ table IS your work list), a real run with the recorder +
+   `coverage --runtime` (are referenced ids actually exercised? which dynamic ids exist?).
+2. **Act on the top ⚠ cluster**: write the spec, re-run, re-measure. Repeat.
+3. **Ratchet the gate**: freeze `coverage --min <achieved floor>` in CI so coverage can
+   only go up; deferred clusters get logged explicitly, never silently dropped.
+
+Validated end-to-end on a real app (interactive coverage 8.8% → 22.8% in three
+worklist-driven commits, `referenced-but-never-exercised` held at 0 throughout) — see
+`docs/findings/2026-06-12-coverage-poc-survey.md` and the demo project's
+`COVERAGE-LOG.md` for the full trace.
+
 ---
 
 ## 2. CLI reference
