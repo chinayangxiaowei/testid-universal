@@ -80,12 +80,23 @@ function isInteractive(e: RegistryEntry): boolean {
 }
 
 export interface UncoveredId { id: string; element_type: string; interactive: boolean }
+export interface RuntimeCoverage {
+  /** Registry ids that were actually looked up at run time. */
+  exercised: number;
+  /** Referenced by some test, yet never looked up in the recorded runs. */
+  referencedNotExercised: string[];
+  /** Ids exercised at run time that are NOT in the registry (dynamic bound ids). */
+  unknownExercised: string[];
+}
+
 export interface CoverageReport {
   total: number;
   covered: number;
   ratio: number;
   interactive: { total: number; covered: number; ratio: number };
   uncovered: UncoveredId[];
+  /** Present when an exercised-ids artifact was supplied. */
+  runtime?: RuntimeCoverage;
 }
 
 /**
@@ -93,7 +104,7 @@ export interface CoverageReport {
  * test. "All diffs green" only proves consistency of what tests already reference;
  * this report answers the adequacy question — and `uncovered` is the work list.
  */
-export function coverageReport(snapshot: RegistrySnapshot, testMap: Record<string, string[]>): CoverageReport {
+export function coverageReport(snapshot: RegistrySnapshot, testMap: Record<string, string[]>, exercisedIds?: string[]): CoverageReport {
   let covered = 0;
   let iTotal = 0;
   let iCovered = 0;
@@ -107,7 +118,20 @@ export function coverageReport(snapshot: RegistrySnapshot, testMap: Record<strin
     else uncovered.push({ id, element_type: e.element_type, interactive });
   }
   uncovered.sort((a, b) => (a.interactive === b.interactive ? a.id.localeCompare(b.id) : a.interactive ? -1 : 1));
+  let runtime: RuntimeCoverage | undefined;
+  if (exercisedIds) {
+    const exercised = new Set(exercisedIds);
+    const registryIds = new Set(Object.keys(snapshot.entries));
+    runtime = {
+      exercised: [...exercised].filter((id) => registryIds.has(id)).length,
+      referencedNotExercised: Object.keys(snapshot.entries)
+        .filter((id) => (testMap[id]?.length ?? 0) > 0 && !exercised.has(id))
+        .sort(),
+      unknownExercised: [...exercised].filter((id) => !registryIds.has(id)).sort(),
+    };
+  }
   return {
+    runtime,
     total: entries.length,
     covered,
     ratio: entries.length ? covered / entries.length : 1,
@@ -124,6 +148,19 @@ export function coverageToMarkdown(r: CoverageReport): string {
     `- all tagged ids referenced by tests: **${r.covered}/${r.total}** (${pct(r.ratio)})`,
     `- interactive (test-worthy) ids covered: **${r.interactive.covered}/${r.interactive.total}** (${pct(r.interactive.ratio)})`,
   ];
+  if (r.runtime) {
+    L.push(
+      `- exercised at run time: **${r.runtime.exercised}** registry ids; ` +
+      `referenced-but-never-exercised: **${r.runtime.referencedNotExercised.length}**; ` +
+      `dynamic ids outside the registry: **${r.runtime.unknownExercised.length}**`,
+    );
+    if (r.runtime.referencedNotExercised.length) {
+      L.push('', '## Referenced but never exercised', ...r.runtime.referencedNotExercised.map((id) => `- \`${id}\``));
+    }
+    if (r.runtime.unknownExercised.length) {
+      L.push('', '## Exercised dynamic ids (not in registry)', ...r.runtime.unknownExercised.map((id) => `- \`${id}\``));
+    }
+  }
   if (r.uncovered.length) {
     L.push('', '## Uncovered (interactive first)', '| TestID | Type |', '| --- | --- |');
     for (const u of r.uncovered) L.push(`| \`${u.id}\` | ${u.element_type}${u.interactive ? ' ⚠' : ''} |`);

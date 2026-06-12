@@ -50,3 +50,19 @@ describe('interactive classification (semantics + ARIA role + tabindex)', () => 
   });
 });
 
+
+describe('coverageReport with runtime exercised ids', () => {
+  it('splits covered into exercised vs referenced-only, and surfaces unknown dynamic ids', () => {
+    const r = coverageReport(snap, map, ['login__button--save', 'row-42']);
+    expect(r.runtime).toEqual({
+      exercised: 1,                                  // save button: referenced AND exercised
+      referencedNotExercised: [],                    // nothing referenced-but-untouched
+      unknownExercised: ['row-42'],                  // dynamic id outside the registry
+    });
+  });
+
+  it('flags referenced-but-never-exercised ids', () => {
+    const r = coverageReport(snap, map, ['row-1']);
+    expect(r.runtime!.referencedNotExercised).toEqual(['login__button--save']);
+  });
+});

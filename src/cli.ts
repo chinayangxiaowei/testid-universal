@@ -28,6 +28,7 @@ import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
 import { LocatorTarget, generateConstants } from './locators';
 import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, coverageReport, coverageToMarkdown } from './testmap';
+import { readRuntimeRecord } from './runtime';
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
@@ -163,7 +164,8 @@ async function cmdCoverage(flags: Record<string, string | boolean>) {
   const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
   const snap = await transport.latest();
   if (!snap) { console.error('no registry yet'); process.exit(2); }
-  const report = coverageReport(snap, buildTestMap(loadTestFiles(flags), snap));
+  const exercised = flags.runtime ? readRuntimeRecord(flags.runtime as string) : undefined;
+  const report = coverageReport(snap, buildTestMap(loadTestFiles(flags), snap), exercised);
   console.log(coverageToMarkdown(report));
   if (flags.min !== undefined) {
     const min = Number(flags.min);
