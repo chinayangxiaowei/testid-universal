@@ -11,7 +11,7 @@
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
  *   testid gen-locators [--target robot|playwright|cypress|webdriverio|selenium-python|testcafe] [--out DIR] [--registry DIR] [--server URL]
  *   testid gen-constants [--out FILE] [--check] [--registry DIR] [--server URL]
- *   testid affected <fromVersion> <toVersion> | --since FILE  [--tests DIR[,DIR]] [--out-list FILE] [--registry DIR] [--server URL]
+ *   testid affected <fromVersion> <toVersion> | --since FILE  [--tests DIR[,DIR]] [--out-list FILE] [--grep-out FILE] [--files-only] [--registry DIR] [--server URL]
  *   testid mark-green [--since FILE] [--registry DIR] [--server URL]   (record latest version as the re-test anchor)
  *
  * The adapter is picked from the matched files (.vue -> VueAdapter, else HTML);
@@ -30,7 +30,7 @@ import { ReactAdapter } from './adapters/react';
 import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
 import { LocatorTarget, generateConstants } from './locators';
-import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, coverageReport, coverageToMarkdown } from './testmap';
+import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, buildTestCaseMapForIds, affectedTestCases, affectedTestCasesToMarkdown, coverageReport, coverageToMarkdown } from './testmap';
 import { readRuntimeRecord } from './runtime';
 
 function parseArgs(argv: string[]) {
@@ -238,13 +238,32 @@ async function cmdAffected(positional: string[], flags: Record<string, string | 
   // The map must cover ids on BOTH sides of the diff (removed ids are absent from the
   // `to` snapshot), so it is built from the diff's own id set — works over any transport.
   const ids = [...d.added, ...d.removed, ...d.modified, ...d.regenerated].map((e) => e.id);
-  const affected = affectedTests(d, buildTestMapForIds(testFiles, ids));
-  console.log(affectedTestsToMarkdown(affected));
-
+  // Case-level by default (names the exact test blocks); --files-only keeps the
+  // older file-level report.
+  if (flags['files-only']) {
+    const affected = affectedTests(d, buildTestMapForIds(testFiles, ids));
+    console.log(affectedTestsToMarkdown(affected));
+    if (flags['out-list']) {
+      const retest = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests))].sort();
+      writeFileSync(flags['out-list'] as string, retest.join('\n') + (retest.length ? '\n' : ''));
+      console.log(`wrote ${flags['out-list']} (${retest.length} test file(s) to re-run)`);
+    }
+    return;
+  }
+  const affected = affectedTestCases(d, buildTestCaseMapForIds(testFiles, ids));
+  console.log(affectedTestCasesToMarkdown(affected));
   if (flags['out-list']) {
-    const retest = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests))].sort();
+    // Runners select by FILE, so the list stays file-level (the case detail is in
+    // the printed report and, with --grep-out, as a title alternation).
+    const retest = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests.map((t) => t.file)))].sort();
     writeFileSync(flags['out-list'] as string, retest.join('\n') + (retest.length ? '\n' : ''));
     console.log(`wrote ${flags['out-list']} (${retest.length} test file(s) to re-run)`);
+  }
+  if (flags['grep-out']) {
+    // A title alternation for `playwright test -g` / `vitest -t` selective runs.
+    const titles = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests.map((t) => t.test).filter(Boolean)))].sort();
+    writeFileSync(flags['grep-out'] as string, titles.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + (titles.length ? '\n' : ''));
+    console.log(`wrote ${flags['grep-out']} (${titles.length} test title(s) for -g/-t)`);
   }
 }
 

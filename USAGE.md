@@ -144,7 +144,7 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 | `gen-constants` | `--out FILE` · `--check` (CI gate: exit 1 if the committed module is missing/stale vs the latest registry) (default stdout) | throws on constant-name collision (fail-closed guarantee) |
 | `mark-green` | `--since FILE` (default `.testids-green.json`) | records the latest registry version as the re-test anchor; run it after the selective suite passes. `affected --since FILE` then always diffs last-green -> latest |
 | `coverage` | `--tests DIR[,DIR]` (default `e2e`) · `--min N` · `--runtime FILE` | coverage of tagged ids by tests (overall + interactive); `--min` gates on the interactive percentage (exit 1 below); `--runtime` merges an exercised-ids artifact (referenced vs exercised + dynamic ids) |
-| `affected <from> <to>` (or `--since FILE`) | `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
+| `affected <from> <to>` (or `--since FILE`) | `--tests DIR[,DIR]` · `--out-list FILE` (file list for the runner) · `--grep-out FILE` (test-title alternation for `-g`/`-t`) · `--files-only` (legacy file-level report) | case-level by default: names the exact `test(...)` block each changed id sits in `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
 
 Backend: `npm run serve` boots the REST shell (`PORT`, `REGISTRY_DIR` env vars).
 
