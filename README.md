@@ -232,8 +232,8 @@ from props only and instances share one id), plus **HTML** (regex scanner, demo-
   theoretically unavoidable) — the warning recommends an explicit `data-tid`.
 - Source-dependency tracking follows **direct references only** (no call graph); Vue
   options API / plain `<script>` resolve name-only.
-- `JsonFileStorage` is last-write-wins (no locking/auth) — fine embedded, use a
-  transactional storage for a shared service.
+- `JsonFileStorage` is last-write-wins (no locking/auth) — fine embedded; for a
+  shared service use `PostgresStorage` (transactional, same interface).
 - The HTML adapter is a regex scanner (demo-grade).
 
 ## Development

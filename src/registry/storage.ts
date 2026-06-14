@@ -6,9 +6,9 @@
  * history). RegistryStorage is the small interface the rest of the system depends
  * on; swapping InMemory ↔ JsonFile ↔ (future) Postgres changes nothing upstream.
  *
- * NOTE (known limitation): JsonFileStorage is last-write-wins with no locking, so
- * concurrent multi-process writes can corrupt the registry. A transactional
- * PostgresStorage is the intended production implementation.
+ * JsonFileStorage is last-write-wins with no locking (fine embedded, corrupts under
+ * concurrent multi-process writes). For a shared service use the transactional
+ * PostgresStorage (src/registry/postgres.ts), which satisfies the same interface.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';

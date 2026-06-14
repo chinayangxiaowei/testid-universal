@@ -2,3 +2,4 @@
 export * from './storage';
 export * from './registry';
 export * from './diff';
+export * from './postgres';
