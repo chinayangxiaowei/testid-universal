@@ -56,3 +56,15 @@ describe('HtmlTemplateAdapter *ngFor loop detection', () => {
     expect(by((n) => n.tag === 'th')[0].inLoop ?? false).toBe(false);
   });
 });
+
+describe('HtmlTemplateAdapter skips non-content tags', () => {
+  it('does not emit nodes for script / style / title (never test targets)', () => {
+    const adapter = new HtmlTemplateAdapter();
+    const src = '<title>Hi</title><script>var x = 1; if (x) doThing();</script><style>.a{color:red}</style><button>Go</button>';
+    const tags = adapter.parse(src, 'a.html', 'a').map((n) => n.tag);
+    expect(tags).not.toContain('script');
+    expect(tags).not.toContain('style');
+    expect(tags).not.toContain('title');
+    expect(tags).toContain('button');
+  });
+});

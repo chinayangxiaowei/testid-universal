@@ -23,18 +23,19 @@
     "serve": "ts-node src/server/http.ts"
   },
   "devDependencies": {
+    "@angular/compiler": "^20.0.0",
+    "@babel/parser": "^7.25.0",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^20.11.0",
     "@vue/compiler-sfc": "^3.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0",
-    "vitest": "^4.1.8",
-    "@angular/compiler": "^20.0.0",
-    "@babel/parser": "^7.25.0"
+    "vitest": "^4.1.8"
   },
   "peerDependencies": {
-    "@vue/compiler-sfc": "^3.0.0",
     "@angular/compiler": "^17.0.0 || ^18.0.0 || ^19.0.0 || ^20.0.0",
-    "@babel/parser": "^7.20.0"
+    "@babel/parser": "^7.20.0",
+    "@vue/compiler-sfc": "^3.0.0"
   },
   "peerDependenciesMeta": {
     "@vue/compiler-sfc": {

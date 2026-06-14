@@ -46,7 +46,9 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
     const loopRanges: { start: number; end: number }[] = [];
     while ((m = tagRe.exec(source)) !== null) {
       const tag = m[1];
-      if (tag === 'template' || tag === 'ng-container' || tag === 'ng-template') continue;
+      // Structural/non-content tags are never test targets; their text is code or
+      // metadata, not UI copy (a real served page surfaced <script>/<title> noise).
+      if (['template', 'ng-container', 'ng-template', 'script', 'style', 'title', 'head'].includes(tag.toLowerCase())) continue;
       const attrBlob = m[2] ?? '';
       const attrs = parseAttrs(attrBlob);
 
