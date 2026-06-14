@@ -118,6 +118,48 @@ git diff 超出被打标组件文件范围时放弃选择性、升级全量;保�
 全程 `referenced-but-never-exercised` 保持 0)——完整轨迹见
 `docs/findings/2026-06-12-coverage-poc-survey.md` 与演示项目的 `COVERAGE-LOG.md`。
 
+### 1.8 完整测试金字塔(视觉 / 响应式 / 可访问性)
+
+testid 循环只是**其中一层**:它保证定位符稳定并路由重测,但**不**告诉你 UI 好不好看、
+能否扛住手机视口、是否可访问。完整的前端测试在同一次 Playwright 运行上再加三层——而且
+它们复用本工具生成的 testid 作为稳定锚点:
+
+1. **视觉回归** —— Playwright `toHaveScreenshot()` baseline 入库。两种粒度:整页(逮
+   布局崩坏)+ 通过 `getByTestId(testIds.x)` 的**组件级**(逮局部样式变化)。生成的常量
+   锚定组件截图,功能测试与视觉测试瞄准同一批元素。
+2. **响应式** —— `desktop` 与 `mobile` 两个 Playwright project(覆写 `viewport`),每个
+   功能 spec 在两个视口都跑,断点崩了 CI 就红。
+3. **可访问性** —— `@axe-core/playwright`,WCAG 2A/2AA,`serious`/`critical` 即失败。
+
+```ts
+// playwright.config.ts
+expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: 'disabled' } },
+projects: [
+  { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+  { name: 'mobile',  use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true } },
+],
+```
+```ts
+// visual.spec.ts —— 布局 + 样式保真两种粒度
+await expect(page).toHaveScreenshot('login.png', { fullPage: true });               // 布局
+await expect(page.getByTestId(testIds.loginSubmit)).toHaveScreenshot('cta.png');    // 样式
+// a11y.spec.ts
+const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+expect(r.violations.filter((v) => ['serious','critical'].includes(v.impact!))).toEqual([]);
+```
+
+在真实 Vue 应用(Fast Team,见其 `DEV-LOG.md`)上 dogfooding 时验证的两条标定教训:
+
+- **整页 `maxDiffPixelRatio` 会稀释局部变化。** 一次主强调色变更只占整页不到 2%,被
+  0.02 阈值漏掉;**组件级**截图(强调色占该图约 96%)逮住了它。整页务必与组件截图配对
+  ——而瞄准组件靠的正是 testid。
+- **a11y 抓肉眼抓不到的。** axe 扫出一处对比度不达标的分隔线(WCAG AA 失败),评审时看
+  着没问题——要自动化,别靠肉眼。
+
+互补性正是要点:**testid 定位符对变化"有抗性"(换皮不能移动它们——已验证:整套重设计
+后每个 id 都 sticky,零漂移);视觉 baseline 对变化"敏感"(换皮就该点亮它们供评审)。**
+两个轴都需要,且共享同一批锚点。
+
 ---
 
 ## 2. CLI 参考

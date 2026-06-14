@@ -129,6 +129,54 @@ worklist-driven commits, `referenced-but-never-exercised` held at 0 throughout) 
 `docs/findings/2026-06-12-coverage-poc-survey.md` and the demo project's
 `COVERAGE-LOG.md` for the full trace.
 
+### 1.8 The full testing pyramid (visual / responsive / a11y)
+
+The testid loop is **one layer**: it keeps locators stable and routes re-tests. It does
+*not* tell you whether the UI looks right, survives a phone viewport, or is accessible.
+A complete frontend setup adds three more layers on the same Playwright run — and they
+reuse the very testids this tool generates as their stable anchors:
+
+1. **Visual regression** — Playwright `toHaveScreenshot()` baselines, committed to the
+   repo. Snapshot at **two granularities**: full-page (catches layout breakage) AND
+   component-scoped via `getByTestId(testIds.x)` (catches localized style changes). The
+   generated constants anchor the component shots, so functional and visual tests target
+   the same elements.
+2. **Responsive** — a `desktop` and a `mobile` Playwright project (`viewport` overrides);
+   every functional spec runs on both, so a broken breakpoint fails CI.
+3. **Accessibility** — `@axe-core/playwright`, WCAG 2A/2AA, fail on `serious`/`critical`.
+
+```ts
+// playwright.config.ts
+expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: 'disabled' } },
+projects: [
+  { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+  { name: 'mobile',  use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true } },
+],
+```
+```ts
+// visual.spec.ts — layout AND style fidelity
+await expect(page).toHaveScreenshot('login.png', { fullPage: true });               // layout
+await expect(page.getByTestId(testIds.loginSubmit)).toHaveScreenshot('cta.png');    // style
+// a11y.spec.ts
+const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+expect(r.violations.filter((v) => ['serious','critical'].includes(v.impact!))).toEqual([]);
+```
+
+Two calibration lessons validated while dogfooding this on a real Vue app (Fast Team —
+see its `DEV-LOG.md`):
+
+- **A full-page `maxDiffPixelRatio` dilutes localized changes.** A primary-accent colour
+  change occupied <2% of the page and slipped under a 0.02 ratio; the **component-scoped**
+  shot (the accent is ~96% of *that* image) caught it. Always pair full-page with
+  component shots — and the testid is what targets the component.
+- **a11y catches what the eye cannot.** axe flagged a low-contrast divider (WCAG AA
+  failure) that looked fine in review — automate it, don't eyeball it.
+
+The complementarity is the point: **testid locators are change-*resistant* (a restyle
+must not move them — proven: a full redesign kept every id sticky, 0 churn); visual
+baselines are change-*sensitive* (a restyle *should* light them up for review).** Both
+axes are needed, and they share the same anchors.
+
 ---
 
 ## 2. CLI reference
