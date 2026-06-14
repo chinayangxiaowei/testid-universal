@@ -276,6 +276,26 @@ async function cmdMarkGreen(flags: Record<string, string | boolean>) {
   console.log(`marked v${latest.version} as green (${sinceFile})`);
 }
 
+async function cmdRollback(flags: Record<string, string | boolean>) {
+  const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
+  if (!transport.rollback) { console.error('rollback is embedded-only (not available over --server)'); process.exit(2); }
+  const r = await transport.rollback();
+  if (!r) { console.error('nothing to roll back (registry is at v1 or empty)'); process.exit(1); }
+  console.log(`rolled back: latest is now v${r.to} (was v${r.from}; v${r.from} is kept and a re-tag overwrites it)`);
+}
+
+async function cmdActivity(flags: Record<string, string | boolean>) {
+  const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
+  if (!transport.activity) { console.error('activity is embedded-only (not available over --server)'); process.exit(2); }
+  const log = await transport.activity();
+  if (!log.length) { console.log('(no activity recorded)'); return; }
+  for (const e of log) {
+    console.log(e.action === 'save'
+      ? `${e.at}  save      v${e.version}`
+      : `${e.at}  rollback  v${e.from} -> v${e.to}`);
+  }
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positional, flags } = parseArgs(rest);
@@ -287,8 +307,10 @@ async function main() {
     case 'affected': return cmdAffected(positional, flags);
     case 'coverage': return cmdCoverage(flags);
     case 'mark-green': return cmdMarkGreen(flags);
+    case 'rollback': return cmdRollback(flags);
+    case 'activity': return cmdActivity(flags);
     default:
-      console.log('usage: testid <tag|diff|gen-locators|gen-constants|affected|coverage|mark-green> [...]  (add --server <url> to use a remote backend)');
+      console.log('usage: testid <tag|diff|gen-locators|gen-constants|affected|coverage|mark-green|rollback|activity> [...]  (add --server <url> to use a remote backend)');
       process.exit(cmd ? 2 : 0);
   }
 }

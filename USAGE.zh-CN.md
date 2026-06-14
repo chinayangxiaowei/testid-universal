@@ -132,6 +132,8 @@ git diff 超出被打标组件文件范围时放弃选择性、升级全量;保�
 | `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE` · `--check`(CI 闸:已提交的常量模块缺失或落后于注册表最新版时 exit 1)(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
 | `mark-green` | `--since FILE`(默认 `.testids-green.json`)| 把注册表最新版本记为重测锚点;选择性重测通过后执行。之后 `affected --since FILE` 恒为 上次绿 -> 最新 的 diff |
+| `rollback` |(仅嵌入式)| 把 `latest` 指回上一版本(非破坏性:被回滚的 `v<N>.json` 保留,重新 tag 会覆盖它)。用于一次错误打标后回退 |
+| `activity` |(仅嵌入式)| 打印注册表活动日志(每次 save 与 rollback,从旧到新)|
 | `coverage` | `--tests DIR[,DIR]`(默认 `e2e`)· `--min N` · `--runtime FILE` | 已打标 id 被测试引用的覆盖率(总体 + 交互元素);`--min` 以交互覆盖率为闸门(低于则 exit 1);`--runtime` 合并运行时"行使"工件(引用 vs 行使 + 动态 id) |
 | `affected <from> <to>`(或 `--since FILE`)| `--tests DIR[,DIR]` · `--out-list FILE`(给 runner 的文件清单)· `--grep-out FILE`(供 `-g`/`-t` 的用例标题正则)· `--files-only`(旧的文件级报告)| 默认用例级:指出每个变更 id 所在的具体 `test(...)` 块 `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |
 

@@ -10,7 +10,7 @@
  * multi-team testid authority.
  */
 import { ElementNode, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning, TagStats } from '../core';
-import { RegistryStorage, RegistrySnapshot, reconcile, diff, DiffResult, generateLocatorsSafe, LocatorTarget } from './_reexport';
+import { RegistryStorage, RegistrySnapshot, ActivityEntry, reconcile, diff, DiffResult, generateLocatorsSafe, LocatorTarget } from './_reexport';
 
 export interface TagRequest {
   nodes: ElementNode[];
@@ -83,5 +83,13 @@ export class TestIdService {
     const latest = await this.storage.loadLatest();
     if (!latest) return null;
     return generateLocatorsSafe(latest, target, attributeName);
+  }
+
+  async rollback(): Promise<{ from: number; to: number } | null> {
+    return this.storage.rollback();
+  }
+
+  async activity(): Promise<ActivityEntry[]> {
+    return this.storage.activity();
   }
 }

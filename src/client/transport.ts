@@ -12,7 +12,7 @@
  * no calling code is touched.
  */
 import { TagRequest, TagResponse, TestIdService } from '../server/service';
-import { RegistrySnapshot, RegistryStorage } from '../registry/storage';
+import { RegistrySnapshot, RegistryStorage, ActivityEntry } from '../registry/storage';
 import { DiffResult } from '../registry/diff';
 import { LocatorTarget } from '../locators';
 
@@ -21,6 +21,9 @@ export interface TestIdTransport {
   latest(): Promise<RegistrySnapshot | null>;
   diff(from: number, to: number, threshold?: number): Promise<DiffResult | null>;
   locators(target: LocatorTarget, attr?: string): Promise<Record<string, string> | null>;
+  /** Registry maintenance (embedded transport only; HttpTransport throws). */
+  rollback?(): Promise<{ from: number; to: number } | null>;
+  activity?(): Promise<ActivityEntry[]>;
 }
 
 /** In-process. Zero setup — just give it a storage (in-memory or JSON-file). */
@@ -35,6 +38,8 @@ export class LocalTransport implements TestIdTransport {
   latest() { return this.service.latest(); }
   diff(from: number, to: number, threshold = 0.8) { return this.service.diff(from, to, threshold); }
   locators(target: LocatorTarget, attr?: string) { return this.service.locators(target, attr); }
+  rollback() { return this.service.rollback(); }
+  activity() { return this.service.activity(); }
 }
 
 /** Remote. Uses global fetch (Node 18+), so still zero dependencies. */
