@@ -177,6 +177,52 @@ must not move them — proven: a full redesign kept every id sticky, 0 churn); v
 baselines are change-*sensitive* (a restyle *should* light them up for review).** Both
 axes are needed, and they share the same anchors.
 
+### 1.9 The standard testing workflow (ordered + trigger-driven)
+
+§1.1–1.8 describe *capabilities*. This is the **protocol** an agent (or CI) follows on
+every change. Two rules govern it: **run gates fast-to-slow so failures surface early,
+and let the change TYPE decide which gates are mandatory.** Never call a change done with
+a required gate skipped — an id change is *necessary but not sufficient*.
+
+**The pipeline — always this order:**
+
+0. **Baseline.** Note the last-green registry version (`mark-green` anchor / `--since` file).
+1. **Static, fast:** `typecheck` → `vitest run --coverage` (unit + code coverage) → lint.
+2. **`tag`** (sticky). **Act on every warning before continuing:** `unstable-identity` →
+   add a `data-tid`; `loop-multiplicity` / `component-multiplicity` → bind a per-item
+   `:data-testid`. (A warning ignored here is a flaky locator later.)
+3. **`affected --since` (or `diff`)** → the case-level re-test work list.
+4. **`gen-constants --check`** → regenerate + commit if stale; a vanished id must fail
+   closed at `tsc`, never silently.
+5. **Run the routed tests:** the `affected` e2e specs, **plus** the touched surface's
+   **visual regression** (full-page + component) and **a11y**. For any UI change, also
+   render and *look* (screenshot) — automated gates don't judge taste.
+6. **Coverage:** `coverage --runtime` (testid) + the unit `--coverage` (code). Ratchet
+   both gates (`--min` / `coverage.thresholds`); log deferred clusters, never drop silently.
+7. **`mark-green`** once the selective suite is green — the new re-test anchor.
+8. **CI / nightly:** a **full** run (every spec, all viewports). Transitive code changes
+   are invisible to the registry *by design*, so the full run is the backstop.
+
+**The trigger matrix — what each change TYPE must run** (✓ = mandatory):
+
+| You changed… | unit + code cov | tag → affected | functional e2e | visual regression | a11y | full run |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: |
+| Markup / DOM / attributes | if logic too | ✓ (ids, routing) | affected only | ✓ layout+component | ✓ | — |
+| CSS / styling only | — | ✓ (expect **0 churn**) | smoke | ✓ **(the gate for this)** | ✓ (contrast) | — |
+| Copy / text only | — | ✓ (`modified{text}`, id frozen) | only if a test asserts the copy | component shot if in a tested el | — | — |
+| Handler / validator / logic body | ✓ | ✓ (`symbol:` re-test) | affected (routed by L2) | — | — | — |
+| Store / state / data model | ✓ | — | flows touching it | — | — | — |
+| New component / screen | ✓ (new) | ✓ (new ids + warnings) | **write new** | **new baselines** | ✓ | — |
+| Routing | — | ✓ (route signals) | navigation specs | new routes | — | — |
+| Dep bump / build / framework upgrade | ✓ | `tag --check` (expect 0 churn) | — | — | — | ✓ |
+
+Read a row as "the id signal can't see this, so these other gates must": a CSS change
+moves no id but must clear **visual + a11y**; a handler-body edit moves no id but
+`symbol:` routes its tests; a dependency bump touches nothing the registry sees and so
+demands the **full run**. Each row exists because skipping it once let a real defect
+through while dogfooding (native-validation bug, WCAG contrast failure, a localized
+visual change diluted by a full-page diff) — see the demo project's `DEV-LOG.md`.
+
 ---
 
 ## 2. CLI reference
