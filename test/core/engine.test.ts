@@ -19,6 +19,8 @@ describe('shouldTag', () => {
     expect(shouldTag(node({ tag: 'h1', signals: { text: 'Welcome' } }), cfg)).toBe(false);
     expect(shouldTag(node({ tag: 'th', signals: { text: 'Name' } }), cfg)).toBe(false);
     expect(shouldTag(node({ tag: 'label', signals: { text: 'Remember me' } }), cfg)).toBe(false);
+    // <option> is never an individual e2e target (you selectOption the parent <select>).
+    expect(shouldTag(node({ tag: 'option', signals: { text: 'Cash', value: 'cash' } }), cfg)).toBe(false);
   });
   it('keeps a skipTags element that carries an explicit key', () => {
     expect(shouldTag(node({ tag: 'h1', signals: { explicit_key: 'page/title', text: 'Welcome' } }), cfg)).toBe(true);

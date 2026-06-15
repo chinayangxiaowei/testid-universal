@@ -157,5 +157,5 @@ export const DEFAULT_CONFIG: CoreConfig = {
   explicitKeyAttribute: 'data-tid',
   customTagMap: {},
   ignoreTags: [],
-  skipTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'th', 'label'],
+  skipTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'th', 'label', 'option', 'optgroup'],
 };
