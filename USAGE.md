@@ -256,7 +256,7 @@ The CLI exposes `--attr` only; full config goes through the library
 | `explicitKeyAttribute` | `data-tid` | the author-written stable key (Tier 0); wins the identity outright |
 | `customTagMap` | `{}` | component-library classification, e.g. `{ 'v-btn': { short: 'button', long: 'vuetify_btn' } }` (see `VUETIFY_TAG_MAP`) |
 | `ignoreTags` | `[]` | never tagged, period |
-| `skipTags` | `h1…h6, th, label` | copy-only tags: not minted **unless** they carry a `data-tid` or an already-written id (sticky always honored) |
+| `skipTags` | `h1…h6, th, label, option, optgroup` | not minted **unless** they carry a `data-tid` or an already-written id (sticky always honored). `option`/`optgroup`: native selects are driven by the parent's value, so options are not auto-minted — but a `data-tid` opts one in, and custom `role="option"` items (`<li>`/`<div>`, the kind you click) are unaffected. |
 
 Identity-key priority (core-owned, not configurable):
 `explicit_key → form_control → name → route → event_handlers → bound_identifiers →
@@ -302,9 +302,11 @@ first (documented limitation).
 `data-tid` is the *input*: a hand-written stable key that wins identity. `data-testid` is
 the *output* the tool writes and tests query. They coexist on the same element.
 
-**A `th`/`label`/heading I actually want tagged is skipped.**
-`skipTags` skips copy-only tags for fresh minting. Add a `data-tid` to that element (or
-shrink `skipTags` via library config).
+**A `th`/`label`/heading/`option` I actually want tagged is skipped.**
+`skipTags` skips those tags for fresh *minting* only. Add a `data-tid` to that element to
+opt it back in (the skip is soft), or shrink `skipTags` via config. `option`/`optgroup`
+are skipped because native selects are targeted by the parent's value, not per-option —
+custom `role="option"` widgets (`<li>`/`<div>`) are never affected.
 
 **Per-row buttons in a table all share one id.**
 That is the `loop-multiplicity` warning. Bind a per-item id; until then only count-level

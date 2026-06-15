@@ -19,11 +19,14 @@ describe('shouldTag', () => {
     expect(shouldTag(node({ tag: 'h1', signals: { text: 'Welcome' } }), cfg)).toBe(false);
     expect(shouldTag(node({ tag: 'th', signals: { text: 'Name' } }), cfg)).toBe(false);
     expect(shouldTag(node({ tag: 'label', signals: { text: 'Remember me' } }), cfg)).toBe(false);
-    // <option> is never an individual e2e target (you selectOption the parent <select>).
+    // <option> is rarely targeted individually (you selectOption the parent <select>),
+    // so it is skip-by-default — but opt-in still works (next test).
     expect(shouldTag(node({ tag: 'option', signals: { text: 'Cash', value: 'cash' } }), cfg)).toBe(false);
   });
   it('keeps a skipTags element that carries an explicit key', () => {
     expect(shouldTag(node({ tag: 'h1', signals: { explicit_key: 'page/title', text: 'Welcome' } }), cfg)).toBe(true);
+    // An <option> you DO want to target opts in with a data-tid — the skip is soft.
+    expect(shouldTag(node({ tag: 'option', signals: { explicit_key: 'plan-pro', value: 'pro' } }), cfg)).toBe(true);
   });
   it('keeps a skipTags element that already has a written id (sticky)', () => {
     expect(shouldTag(node({ tag: 'h1', signals: { text: 'Welcome' }, existingId: 'x__h1--old' }), cfg)).toBe(true);

@@ -236,7 +236,7 @@ CLI 只暴露 `--attr`;完整配置走库
 | `explicitKeyAttribute` | `data-tid` | 手写稳定 key(Tier 0),直接赢得 identity |
 | `customTagMap` | `{}` | 组件库分类映射,如 `{ 'v-btn': { short: 'button', long: 'vuetify_btn' } }`(参见 `VUETIFY_TAG_MAP`) |
 | `ignoreTags` | `[]` | 永不打标 |
-| `skipTags` | `h1…h6, th, label` | 纯文案标签:不铸新 id,**除非**带 `data-tid` 或已有写入的 id(sticky 永远尊重) |
+| `skipTags` | `h1…h6, th, label, option, optgroup` | 这些标签不自动铸造,**除非**带 `data-tid` 或已有写入的 id(sticky 永远尊重)。`option`/`optgroup`:原生 select 按父级 value 驱动,故 option 不自动铸造——但写 `data-tid` 即可显式纳入,且自定义 `role="option"` 项(`<li>`/`<div>`,你真正会点的)不受影响。 |
 
 identity key 优先级(core 持有,不可配置):
 `explicit_key → form_control → name → route → event_handlers → bound_identifiers →
