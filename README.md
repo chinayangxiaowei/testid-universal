@@ -184,8 +184,10 @@ npm run serve            # OPTIONAL node:http backend on :7337; add --server <ur
 ```
 
 `affected` prints the `write-new` / `retire` / `re-test` report and (with `--out-list`)
-emits the file list to feed straight into the runner: `npx playwright test $(cat retest.txt)`.
-The full CI recipe (gates, selective execution, the full-run fallback rule) is in
+emits the file list for the runner (`--include-limited` adds the beyond-depth fallback
+tests; guard an empty list — `playwright test` with no filter runs everything).
+**Step-by-step CI setup: [`docs/ci-tutorial.md`](docs/ci-tutorial.md)** (copy-ready router
+script + GitHub Actions workflow in `examples/ci/`); design rationale in
 `docs/superpowers/specs/2026-06-11-ci-integration-design.md`.
 
 The adapter is picked from the matched files (`.vue` → `VueAdapter`, otherwise HTML);

@@ -69,3 +69,27 @@ describe('depthLimitedTests', () => {
     expect(depthLimitedToMarkdown([])).toBe('');
   });
 });
+
+// `affected --out-list FILE --include-limited`: the runner list also carries the
+// beyond-depth fallback tests, so the CLI route matches the reference CI script.
+import { retestFiles } from '../../src/testmap';
+
+describe('retestFiles (runner list for --out-list)', () => {
+  const affected = [
+    { id: 'a', action: 're-test' as const, tests: [{ file: 'b.spec.ts', test: 'x' }, { file: 'a.spec.ts', test: 'y' }] },
+    { id: 'n', action: 'write-new' as const, tests: [{ file: 'new.spec.ts', test: '' }] },
+  ];
+  const limited = [{ id: 'l', limits: ['s>f>g'], tests: ['deep.spec.ts', 'a.spec.ts'] }];
+
+  it('only re-test files by default, sorted and unique', () => {
+    expect(retestFiles(affected)).toEqual(['a.spec.ts', 'b.spec.ts']);
+  });
+
+  it('adds the beyond-depth fallback tests when given', () => {
+    expect(retestFiles(affected, limited)).toEqual(['a.spec.ts', 'b.spec.ts', 'deep.spec.ts']);
+  });
+
+  it('accepts the file-level affected shape too', () => {
+    expect(retestFiles([{ id: 'a', action: 're-test', tests: ['z.spec.ts'] }], limited)).toEqual(['a.spec.ts', 'deep.spec.ts', 'z.spec.ts']);
+  });
+});

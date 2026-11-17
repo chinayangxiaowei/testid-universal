@@ -107,7 +107,9 @@ Add a coverage gate so green diffs cannot hide an untested surface: `testid cove
 --tests e2e --min 60` fails CI when the interactive-id coverage drops below the bar
 (`tag` also prints per-run tagging stats: how many parsed elements got no id at all).
 Wire the five stages (check → constants+tsc → affected → selective run → full-run
-fallback) per `docs/superpowers/specs/2026-06-11-ci-integration-design.md`. Two rules to
+fallback) step by step with **[`docs/ci-tutorial.md`](docs/ci-tutorial.md)** (copy-ready
+`examples/ci/ci-testid.mjs` + `examples/ci/testid.yml`); rationale in
+`docs/superpowers/specs/2026-06-11-ci-integration-design.md`. Two rules to
 keep honest: selective execution only when the git diff is confined to tagged component
 files; keep a nightly/post-merge full run (changes deeper than one hop past a handler are
 invisible to the registry by design — see `dep_defs` in the README).
@@ -244,7 +246,7 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 | `rollback` | (embedded only) | repoints `latest` to the prior version (non-destructive: the rolled-back `v<N>.json` is kept, a re-tag overwrites it). Use after a bad tag run |
 | `activity` | (embedded only) | prints the registry activity log (every save + rollback, oldest first) |
 | `coverage` | `--tests DIR[,DIR]` (default `e2e`) · `--min N` · `--runtime FILE` | coverage of tagged ids by tests (overall + interactive); `--min` gates on the interactive percentage (exit 1 below); `--runtime` merges an exercised-ids artifact (referenced vs exercised + dynamic ids) |
-| `affected <from> <to>` (or `--since FILE`) | `--tests DIR[,DIR]` · `--out-list FILE` (file list for the runner) · `--grep-out FILE` (test-title alternation for `-g`/`-t`) · `--files-only` (legacy file-level report) | case-level by default: names the exact `test(...)` block each changed id sits in `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
+| `affected <from> <to>` (or `--since FILE`) | `--tests DIR[,DIR]` · `--out-list FILE` (file list for the runner) · `--include-limited` (add the beyond-depth fallback tests to that list) · `--grep-out FILE` (test-title alternation for `-g`/`-t`) · `--files-only` (legacy file-level report) | case-level by default: names the exact `test(...)` block each changed id sits in `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
 
 Backend: `npm run serve` boots the REST shell (`PORT`, `REGISTRY_DIR` env vars). Without
 `DATABASE_URL` it uses `JsonFileStorage` and warns at startup that this is safe for one host

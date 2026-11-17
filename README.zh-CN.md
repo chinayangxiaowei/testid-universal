@@ -171,8 +171,9 @@ npm run serve            # 可选:在 :7337 启动 node:http 后端;任意命令
 ```
 
 `affected` 打印 `write-new` / `retire` / `re-test` 报告;加 `--out-list` 会产出可直接喂给
-测试运行器的文件清单:`npx playwright test $(cat retest.txt)`。完整的 CI 配方
-(闸门、选择性执行、全量兜底规则)见
+测试运行器的文件清单(`--include-limited` 会加入超深度兜底测试;注意防住空清单——不带过滤参数的
+`playwright test` 会跑全部)。**CI 逐步搭建见 [`docs/ci-tutorial.zh-CN.md`](docs/ci-tutorial.zh-CN.md)**
+(`examples/ci/` 下有可直接复制的路由脚本与 GitHub Actions workflow);设计依据见
 `docs/superpowers/specs/2026-06-11-ci-integration-design.md`。
 
 adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 HTML);

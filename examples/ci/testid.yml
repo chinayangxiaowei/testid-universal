@@ -1,0 +1,77 @@
+# Reference GitHub Actions workflow for testid-universal (see docs/ci-tutorial.md).
+# A thin shell: every routing decision lives in scripts/ci-testid.mjs, so GitLab /
+# CircleCI / a local pre-push hook reuse the same script with a different trigger.
+#
+# Adjust: SRC / EXT / TESTS / the constants path, and the test command (Playwright here).
+name: testid
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * *'            # nightly full run -- the backstop, never optional
+
+env:
+  SRC: src
+  EXT: .vue                         # .jsx,.tsx with --adapter react, etc.
+  TESTS: e2e
+  REGISTRY: .testids
+  CONSTANTS: e2e/testids.generated.ts
+
+jobs:
+  selective:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }    # merge-base needs history
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+
+      # (1) tagging gate -- writes nothing; exit 1 if the PR forgot to run `testid tag`
+      - run: npx testid tag "$SRC" --ext "$EXT" --registry "$REGISTRY" --check
+      # (2) constants fail-closed: stale module -> exit 1; a removed id -> compile error
+      - run: npx testid gen-constants --registry "$REGISTRY" --out "$CONSTANTS" --check
+      - run: npx tsc --noEmit
+
+      # (3) route: tags into a TEMP copy of the registry, diffs against the version
+      #     committed at the merge-base, applies the honesty rule. Never writes the repo.
+      - id: route
+        run: node scripts/ci-testid.mjs --src "$SRC" --ext "$EXT" --registry "$REGISTRY" --tests "$TESTS" --base "origin/${{ github.base_ref }}"
+
+      # (4) execute -- an EMPTY list must not fall through to "run everything by accident"
+      - run: npx playwright install --with-deps
+        if: steps.route.outputs.mode != 'none'
+      - name: selective run
+        if: steps.route.outputs.mode == 'selective'
+        run: npx playwright test $(cat retest.txt)
+      - name: full run (honesty rule)
+        if: steps.route.outputs.mode == 'full'
+        run: npx playwright test
+      - name: nothing affected
+        if: steps.route.outputs.mode == 'none'
+        run: echo "no test is affected by this change (see the job summary)"
+
+  full:                              # (5) backstop: post-merge and nightly
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npx testid tag "$SRC" --ext "$EXT" --registry "$REGISTRY" --check
+      - run: npx playwright install --with-deps
+      - run: npx playwright test
+
+      # OPTIONAL -- advance the committed registry on main after each merge, so PR
+      # baselines stay fresh. Without it, a stale baseline only OVER-routes (changes
+      # merged earlier show up again), never under-routes. Needs `permissions:
+      # contents: write` on this job; the commit is tagged [skip ci].
+      # - if: github.event_name == 'push'
+      #   run: |
+      #     npx testid tag "$SRC" --ext "$EXT" --registry "$REGISTRY"
+      #     git config user.name "testid-bot"; git config user.email "testid-bot@users.noreply.github.com"
+      #     git add "$REGISTRY" && git diff --cached --quiet || git commit -m "chore(testid): advance registry [skip ci]" && git push

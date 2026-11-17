@@ -99,7 +99,9 @@ npx testid tag src --ext .vue --check      # 需要打标则 exit 1;什么都不
 --min 60` 在交互元素覆盖率低于阈值时让 CI 失败(`tag` 也会逐次打印打标统计:
 多少解析到的元素根本没拿到 id)。
 五段管线(check → 常量+tsc → affected → 选择性执行 → 全量兜底)按
-`docs/superpowers/specs/2026-06-11-ci-integration-design.md` 搭建。两条诚实规则:
+**[`docs/ci-tutorial.zh-CN.md`](docs/ci-tutorial.zh-CN.md)** 逐步搭建(可直接复制的
+`examples/ci/ci-testid.mjs` + `examples/ci/testid.yml`);设计依据见
+`docs/superpowers/specs/2026-06-11-ci-integration-design.md`。两条诚实规则:
 git diff 超出被打标组件文件范围时放弃选择性、升级全量;保留夜间/合并后全量
 (handler 之后超过一层的代码变更对注册表不可见,这是设计边界——见 README 的 `dep_defs`)。
 
@@ -222,7 +224,7 @@ expect(r.violations.filter((v) => ['serious','critical'].includes(v.impact!))).t
 | `rollback` |(仅嵌入式)| 把 `latest` 指回上一版本(非破坏性:被回滚的 `v<N>.json` 保留,重新 tag 会覆盖它)。用于一次错误打标后回退 |
 | `activity` |(仅嵌入式)| 打印注册表活动日志(每次 save 与 rollback,从旧到新)|
 | `coverage` | `--tests DIR[,DIR]`(默认 `e2e`)· `--min N` · `--runtime FILE` | 已打标 id 被测试引用的覆盖率(总体 + 交互元素);`--min` 以交互覆盖率为闸门(低于则 exit 1);`--runtime` 合并运行时"行使"工件(引用 vs 行使 + 动态 id) |
-| `affected <from> <to>`(或 `--since FILE`)| `--tests DIR[,DIR]` · `--out-list FILE`(给 runner 的文件清单)· `--grep-out FILE`(供 `-g`/`-t` 的用例标题正则)· `--files-only`(旧的文件级报告)| 默认用例级:指出每个变更 id 所在的具体 `test(...)` 块 `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |
+| `affected <from> <to>`(或 `--since FILE`)| `--tests DIR[,DIR]` · `--out-list FILE`(给 runner 的文件清单)· `--include-limited`(把超深度兜底测试也写进该清单)· `--grep-out FILE`(供 `-g`/`-t` 的用例标题正则)· `--files-only`(旧的文件级报告)| 默认用例级:指出每个变更 id 所在的具体 `test(...)` 块 `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |
 
 后端:`npm run serve` 启动 REST 外壳(`PORT`、`REGISTRY_DIR` 环境变量)。未设置
 `DATABASE_URL` 时使用 `JsonFileStorage`,启动时会警告它只适用于单机;多机写入请设置

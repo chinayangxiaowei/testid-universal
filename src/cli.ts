@@ -11,7 +11,7 @@
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
  *   testid gen-locators [--target robot|playwright|cypress|webdriverio|selenium-python|testcafe] [--out DIR] [--registry DIR] [--server URL]
  *   testid gen-constants [--out FILE] [--lang ts|js] [--check] [--registry DIR] [--server URL]
- *   testid affected <fromVersion> <toVersion> | --since FILE  [--tests DIR[,DIR]] [--out-list FILE] [--grep-out FILE] [--files-only] [--registry DIR] [--server URL]
+ *   testid affected <fromVersion> <toVersion> | --since FILE  [--tests DIR[,DIR]] [--out-list FILE] [--include-limited] [--grep-out FILE] [--files-only] [--registry DIR] [--server URL]
  *   testid mark-green [--since FILE] [--registry DIR] [--server URL]   (record latest version as the re-test anchor)
  *
  * The adapter is picked from the matched files (.vue -> VueAdapter, else HTML);
@@ -30,10 +30,13 @@ import { ReactAdapter } from './adapters/react';
 import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
 import { LocatorTarget, generateConstants, constantsLangForPath, ConstantsLang } from './locators';
-import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, buildTestCaseMapForIds, affectedTestCases, affectedTestCasesToMarkdown, coverageReport, coverageToMarkdown, depthLimitedTests, depthLimitedToMarkdown } from './testmap';
+import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, buildTestCaseMapForIds, affectedTestCases, affectedTestCasesToMarkdown, coverageReport, coverageToMarkdown, depthLimitedTests, depthLimitedToMarkdown, retestFiles } from './testmap';
 import { readRuntimeRecord } from './runtime';
 
-function parseArgs(argv: string[]) {
+/** Switches that never take a value — they must not swallow a following positional. */
+const BOOLEAN_FLAGS = new Set(['check', 'dry', 'regenerate', 'no-deps', 'files-only', 'include-limited']);
+
+export function parseArgs(argv: string[]) {
   const positional: string[] = [];
   const flags: Record<string, string | boolean> = {};
   for (let i = 0; i < argv.length; i++) {
@@ -41,7 +44,7 @@ function parseArgs(argv: string[]) {
     if (a.startsWith('--')) {
       const key = a.slice(2);
       const next = argv[i + 1];
-      if (next && !next.startsWith('--')) { flags[key] = next; i++; } else flags[key] = true;
+      if (!BOOLEAN_FLAGS.has(key) && next && !next.startsWith('--')) { flags[key] = next; i++; } else flags[key] = true;
     } else positional.push(a);
   }
   return { positional, flags };
@@ -261,27 +264,22 @@ async function cmdAffected(positional: string[], flags: Record<string, string | 
   const ids = [...d.added, ...d.removed, ...d.modified, ...d.regenerated].map((e) => e.id);
   // Case-level by default (names the exact test blocks); --files-only keeps the
   // older file-level report.
+  const limited = await loadDepthLimited(transport, testFiles);
+  const md = depthLimitedToMarkdown(limited);
+  const fallback = flags['include-limited'] ? limited : [];
   if (flags['files-only']) {
     const affected = affectedTests(d, buildTestMapForIds(testFiles, ids));
     console.log(affectedTestsToMarkdown(affected));
-    await printDepthLimited(transport, testFiles);
-    if (flags['out-list']) {
-      const retest = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests))].sort();
-      writeFileSync(flags['out-list'] as string, retest.join('\n') + (retest.length ? '\n' : ''));
-      console.log(`wrote ${flags['out-list']} (${retest.length} test file(s) to re-run)`);
-    }
+    if (md) console.log(md);
+    if (flags['out-list']) writeOutList(flags, retestFiles(affected, fallback), fallback.length);
     return;
   }
   const affected = affectedTestCases(d, buildTestCaseMapForIds(testFiles, ids));
   console.log(affectedTestCasesToMarkdown(affected));
-  await printDepthLimited(transport, testFiles);
-  if (flags['out-list']) {
-    // Runners select by FILE, so the list stays file-level (the case detail is in
-    // the printed report and, with --grep-out, as a title alternation).
-    const retest = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests.map((t) => t.file)))].sort();
-    writeFileSync(flags['out-list'] as string, retest.join('\n') + (retest.length ? '\n' : ''));
-    console.log(`wrote ${flags['out-list']} (${retest.length} test file(s) to re-run)`);
-  }
+  if (md) console.log(md);
+  // Runners select by FILE, so the list stays file-level (the case detail is in
+  // the printed report and, with --grep-out, as a title alternation).
+  if (flags['out-list']) writeOutList(flags, retestFiles(affected, fallback), fallback.length);
   if (flags['grep-out']) {
     // A title alternation for `playwright test -g` / `vitest -t` selective runs.
     const titles = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests.map((t) => t.test).filter(Boolean)))].sort();
@@ -290,14 +288,18 @@ async function cmdAffected(positional: string[], flags: Record<string, string | 
   }
 }
 
-/** Append the beyond-depth fallback list (tests whose elements depend on untracked code). */
-async function printDepthLimited(transport: ReturnType<typeof createTransport>, testFiles: { file: string; source: string }[]) {
+/** Beyond-depth fallback list: tests whose elements depend on untracked code. */
+async function loadDepthLimited(transport: ReturnType<typeof createTransport>, testFiles: { file: string; source: string }[]) {
   const latest = await transport.latest();
-  if (!latest) return;
+  if (!latest) return [];
   const ids = Object.keys(latest.entries).filter((id) => latest.entries[id].dep_limited?.length);
-  if (!ids.length) return;
-  const md = depthLimitedToMarkdown(depthLimitedTests(latest, buildTestMapForIds(testFiles, ids)));
-  if (md) console.log(md);
+  return ids.length ? depthLimitedTests(latest, buildTestMapForIds(testFiles, ids)) : [];
+}
+
+function writeOutList(flags: Record<string, string | boolean>, files: string[], fallback: number) {
+  writeFileSync(flags['out-list'] as string, files.join('\n') + (files.length ? '\n' : ''));
+  console.log(`wrote ${flags['out-list']} (${files.length} test file(s) to re-run` +
+    (flags['include-limited'] ? `, incl. beyond-depth fallback from ${fallback} id(s))` : ')'));
 }
 
 async function cmdMarkGreen(flags: Record<string, string | boolean>) {
@@ -348,4 +350,4 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e.message ?? e); process.exit(1); });
+if (require.main === module) main().catch((e) => { console.error(e.message ?? e); process.exit(1); });
