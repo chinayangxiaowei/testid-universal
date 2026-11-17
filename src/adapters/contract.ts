@@ -51,25 +51,99 @@ export function applyEditsByOffset(source: string, edits: Edit[]): string {
  *
  * Each edit's `loc` must span an element's opening tag — `loc.start` at the `<`
  * and `loc.end` at the closing `>` (or the `>` of `/>`). For every edit this
- * rewrites the whole opening tag: it strips any pre-existing data-testid/data-cy
- * and appends the assigned attribute, preserving self-closing form. Re-running on
- * already-tagged source therefore produces identical output (no duplicates).
+ * rewrites the whole opening tag: it strips the tag's OWN pre-existing
+ * data-testid/data-cy and appends the assigned attribute, preserving self-closing
+ * form. Re-running on already-tagged source therefore produces identical output.
  *
- * Shared by the HTML and Vue adapters; any framework whose adapter records opening-
- * tag offsets can reuse it instead of reimplementing the surgery.
+ * Spans may NEST (React: `<Chat terminal={<Terminal />} />` — the inner opening tag
+ * lives inside an outer attribute value). Edits are therefore arranged into a
+ * containment tree and every tag is rebuilt from the ORIGINAL source, with nested
+ * edits rendered recursively into their holes — no offset is ever reused after a
+ * write. Partially overlapping spans are a contract violation and throw (fail
+ * closed rather than corrupt source).
+ *
+ * Shared by the HTML, Vue, Angular and React adapters; any framework whose adapter
+ * records opening-tag offsets can reuse it instead of reimplementing the surgery.
  */
 export function applyTestIdEdits(source: string, edits: Edit[]): string {
-  const ordered = [...edits].sort((a, b) => b.loc.start - a.loc.start);
-  let out = source;
-  for (const e of ordered) {
-    const openTag = out.slice(e.loc.start, e.loc.end + 1);
-    const selfClose = /\/>\s*$/.test(openTag);
-    const inner = openTag
-      .replace(/\/?>\s*$/, '')                                 // drop the closing '>' or '/>'
-      .replace(/\s+(data-testid|data-cy)\s*=\s*"[^"]*"/g, '')   // drop existing test ids
-      .replace(/\s+$/, '');
-    const rebuilt = `${inner} ${e.attributeName}="${e.id}"${selfClose ? ' />' : '>'}`;
-    out = out.slice(0, e.loc.start) + rebuilt + out.slice(e.loc.end + 1);
+  interface Node { e: Edit; children: Node[] }
+  const sorted = [...edits].sort((a, b) => a.loc.start - b.loc.start || b.loc.end - a.loc.end);
+  const roots: Node[] = [];
+  const stack: Node[] = [];
+  for (const e of sorted) {
+    while (stack.length && stack[stack.length - 1].e.loc.end < e.loc.start) stack.pop();
+    const parent = stack[stack.length - 1];
+    if (parent && e.loc.end > parent.e.loc.end) {
+      throw new Error(
+        `applyTestIdEdits: overlapping edit spans [${parent.e.loc.start},${parent.e.loc.end}] and [${e.loc.start},${e.loc.end}]`,
+      );
+    }
+    const node: Node = { e, children: [] };
+    (parent ? parent.children : roots).push(node);
+    stack.push(node);
   }
-  return out;
+
+  const render = ({ e, children }: Node): string => {
+    // Walk the original tag text; own segments get top-level id stripping, nested
+    // edits are rendered recursively in place.
+    // The scanner state (brace depth, quote) carries across holes.
+    const strip = ownTestIdStripper();
+    let body = '';
+    let cursor = e.loc.start;
+    for (const c of children) {
+      body += strip(source.slice(cursor, c.e.loc.start)) + render(c);
+      cursor = c.e.loc.end + 1;
+    }
+    let tail = source.slice(cursor, e.loc.end + 1);
+    const selfClose = /\/>\s*$/.test(tail);
+    tail = strip(tail.replace(/\/?>\s*$/, '')).replace(/\s+$/, '');
+    return `${body}${tail} ${e.attributeName}="${e.id}"${selfClose ? ' />' : '>'}`;
+  };
+
+  let out = '';
+  let cursor = 0;
+  for (const r of roots) {
+    out += source.slice(cursor, r.e.loc.start) + render(r);
+    cursor = r.e.loc.end + 1;
+  }
+  return out + source.slice(cursor);
+}
+
+/**
+ * Returns a stateful stripper that removes ` data-testid="…"` / ` data-cy="…"` only
+ * at a tag's own attribute level: occurrences inside a quoted value or a `{…}`
+ * expression (where a nested JSX element may carry its own id) are left alone.
+ * Feed it a tag's segments in order — brace/quote state carries across the holes
+ * left by nested edits.
+ */
+function ownTestIdStripper(): (text: string) => string {
+  const attr = /\s+(?:data-testid|data-cy)\s*=\s*"[^"]*"/y;
+  let depth = 0;
+  let quote: string | null = null;
+  return (text) => {
+    let out = '';
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (quote) {
+        if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'" || ch === '`') {
+        // Inside an expression, a quote glued to a word char is prose in nested JSX
+        // text (`it's`), not a string literal opener.
+        if (!(depth > 0 && /\w/.test(text[i - 1] ?? ''))) quote = ch;
+      } else if (ch === '{') {
+        depth++;
+      } else if (ch === '}') {
+        depth = Math.max(0, depth - 1);
+      } else if (depth === 0 && /\s/.test(ch)) {
+        attr.lastIndex = i;
+        const m = attr.exec(text);
+        if (m) {
+          i += m[0].length - 1;
+          continue;
+        }
+      }
+      out += ch;
+    }
+    return out;
+  };
 }

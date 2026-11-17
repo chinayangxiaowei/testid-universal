@@ -114,6 +114,72 @@ describe('ReactAdapter.write', () => {
     ]);
     expect(again).toBe(once);
   });
+
+  // Regression (downstream issue): a JSX element passed as a prop value nests its
+  // opening-tag span inside the outer one. The write-back must not cut the inner
+  // attribute with a stale offset, nor strip the inner id while rewriting the outer tag.
+  describe('nested JSX inside a prop value', () => {
+    const NESTED = `export default function App() {
+  return (
+    <Chat title="x" terminal={<Terminal onClose={close} />} />
+  );
+}
+`;
+    const idFor = (tag: string) => (tag === 'Chat' ? 'app__chat--onsend' : 'app__terminal--settermcollapsed');
+    const editsFor = (src: string) =>
+      new ReactAdapter().parse(src, 'App.jsx', 'App').map((n) => ({
+        loc: n.loc!, attributeName: 'data-testid', id: idFor(n.tag),
+      }));
+    const idsOf = (src: string) =>
+      Object.fromEntries(new ReactAdapter().parse(src, 'App.jsx', 'App').map((n) => [n.tag, n.existingId]));
+
+    it('writes both ids intact and the output re-parses', () => {
+      const once = new ReactAdapter().write(NESTED, editsFor(NESTED));
+      expect(idsOf(once)).toEqual({ Chat: 'app__chat--onsend', Terminal: 'app__terminal--settermcollapsed' });
+      expect(once).toContain(
+        '<Chat title="x" terminal={<Terminal onClose={close} data-testid="app__terminal--settermcollapsed" />} data-testid="app__chat--onsend" />',
+      );
+    });
+
+    it('is idempotent on re-tag (every draft re-emits an edit)', () => {
+      const once = new ReactAdapter().write(NESTED, editsFor(NESTED));
+      expect(new ReactAdapter().write(once, editsFor(once))).toBe(once);
+    });
+
+    it('rewriting only the outer tag keeps the inner (unedited) id', () => {
+      const once = new ReactAdapter().write(NESTED, editsFor(NESTED));
+      const outerOnly = editsFor(once).filter((e) => e.id === 'app__chat--onsend').map((e) => ({ ...e, id: 'app__chat--renamed' }));
+      expect(idsOf(new ReactAdapter().write(once, outerOnly))).toEqual({
+        Chat: 'app__chat--renamed', Terminal: 'app__terminal--settermcollapsed',
+      });
+    });
+
+    it('re-tag stays idempotent with prose apostrophes and brace-bearing strings in nested values', () => {
+      const SRC = `const A = () => <Card header={<p>it's done</p>} onClick={() => go("}")} title='a{b' />;\n`;
+      const edits = (src: string) =>
+        new ReactAdapter().parse(src, 'A.jsx', 'A').map((n) => ({ loc: n.loc!, attributeName: 'data-testid', id: `a__${n.tag}` }));
+      const once = new ReactAdapter().write(SRC, edits(SRC));
+      const twice = new ReactAdapter().write(once, edits(once));
+      expect(twice).toBe(once);
+      expect(once.match(/data-testid="a__Card"/g)).toHaveLength(1);
+    });
+
+    it('fails closed on partially overlapping spans instead of corrupting source', () => {
+      const a = { loc: { file: 'x', start: 0, end: 10 }, attributeName: 'data-testid', id: 'a' };
+      const b = { loc: { file: 'x', start: 5, end: 15 }, attributeName: 'data-testid', id: 'b' };
+      expect(() => new ReactAdapter().write('<a b={<c d />} e />', [a, b])).toThrow(/overlapping/);
+    });
+
+    it('handles multi-level nesting and ternaries', () => {
+      const SRC = `const A = () => <Layout header={cond ? <Bar icon={<Icon />} /> : <Baz />} footer={<Foot />} />;\n`;
+      const nodes = new ReactAdapter().parse(SRC, 'A.jsx', 'A');
+      const edits = nodes.map((n) => ({ loc: n.loc!, attributeName: 'data-testid', id: `a__${n.tag.toLowerCase()}` }));
+      const out = new ReactAdapter().write(SRC, edits);
+      const after = Object.fromEntries(new ReactAdapter().parse(out, 'A.jsx', 'A').map((n) => [n.tag, n.existingId]));
+      expect(after).toEqual({ Layout: 'a__layout', Bar: 'a__bar', Icon: 'a__icon', Baz: 'a__baz', Foot: 'a__foot' });
+      expect(new ReactAdapter().write(out, edits.map((e, i) => ({ ...e, loc: new ReactAdapter().parse(out, 'A.jsx', 'A')[i].loc! })))).toBe(out);
+    });
+  });
 });
 
 describe('ReactAdapter.resolveSymbolDefs (same-file L2)', () => {
