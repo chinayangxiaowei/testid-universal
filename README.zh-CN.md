@@ -96,17 +96,18 @@ tagger 会**尊重并永不覆盖**。
 
 ### 5. testID → 用例映射(fail-closed)
 
-`generateConstants(snapshot)` 产出 `testIds` 常量模块。测试 import 常量而非硬编码字符串,
-于是 id 被删除或改名时**编译直接失败**——绝不会发生静默的运行时错配。
-`buildTestMap(testFiles, snapshot)` 扫描测试源码(常量引用 + 裸 id 字符串)得到
-`id → [测试文件]`;`affectedTests(diff, map)` 把 diff 变成已路由的动作清单:
-**`write-new` / `retire` / `re-test`**。
+`generateConstants(snapshot)` 产出 `testIds` 常量模块(TS;目标是 `.js` 时产出带 JSDoc
+`@type {const}` 的纯 JS)。测试 import 常量而非硬编码字符串,于是 id 被删除或改名时**编译直接失败**
+——绝不会发生静默的运行时错配。扫描测试源码(常量引用 + 裸 id 字符串)得到 id → 测试映射,
+diff 随之变成已路由的动作清单:**`write-new` / `retire` / `re-test`**——默认精确到用例级
+(`affectedTestCases`:具体的 `test(...)` 块),也可按文件级(`affectedTests`)。sticky id
+所在元素的 identity 变了会被标为**锚点漂移(anchor drift)**,提醒复核测试意图,而不只是重跑。
 
 ### 6. testID → 源码依赖映射(id 没变也知道该重测)
 
 core 为每个元素挑选它直接引用的符号(handler 名、绑定标识符的根、`v-model` 目标);
-adapter 把这些符号解析为**定义的源码文本**(Vue:经 `@vue/compiler-sfc` 取
-`<script setup>` 顶层声明);core 对文本做空白不敏感的哈希,存入 `symbol_defs`。
+adapter 把这些符号解析为**定义的源码文本**(Vue:`<script setup>` 中的声明;React:JSX
+文件本身;Angular:组件配套的 `.ts`);core 对文本做空白不敏感的哈希,存入 `symbol_defs`。
 当某个定义体发生变化——哪怕 id 冻结、标记一字未动——diff 也会报告 `modified` 并标明
 `symbol:<name>`,关联用例被路由为 `re-test`。
 
@@ -123,8 +124,8 @@ Angular 注入服务的方法(`this.svc.create()`)。这些定义变化时 diff 
 打印 UNRESOLVED(绝不静默当作没变)。超出一层的部分不做哈希,但会被**点名**:`tag` 打印
 BEYOND-depth 依赖(`submit>createOrder>validate`、同对象的 `this.persist()`、
 `(dynamic) handlers[mode]`),注册表以 `dep_limited` 保存,`affected` 末尾附「⚠ Beyond tracking
-depth」小节,列出这类代码变更时应兜底重跑的测试(或直接跑全量)——追两层不等于安全。跨文件变更只有在依赖方文件也在本次 `tag` 范围内时才能
-被看到(对整个源码树打标,不要只对改动文件打标)。无此能力的框架/adapter 降级为仅名字跟踪。
+depth」小节,列出这类代码变更时应兜底重跑的测试(或直接跑全量)——追两层不等于安全。
+跨文件变更只有在依赖方文件也在本次 `tag` 范围内时才能被看到(对整个源码树打标,不要只对改动文件打标)。无此能力的框架/adapter 降级为仅名字跟踪。
 symbol / dep 跟踪之前创建的注册表升级时零噪音(首次运行只记录基线;dep 的 key 只在两侧都存在
 时才比较)。
 
@@ -133,8 +134,13 @@ symbol / dep 跟踪之前创建的注册表升级时零噪音(首次运行只记
 > 手把手教程、CLI/配置/警告完整参考与 FAQ:**[USAGE.zh-CN.md](./USAGE.zh-CN.md)**。
 
 ```bash
-npm install            # core 零运行时依赖
-npm i -D @vue/compiler-sfc   # 仅在使用 Vue adapter 时需要(可选 peer 依赖)
+# 尚未发布到 npm:先克隆并构建,再以本地路径作为依赖
+git clone https://github.com/chinayangxiaowei/testid-universal && (cd testid-universal && npm ci && npm run build)
+npm i -D file:../testid-universal   # 在你的项目里执行;core 零运行时依赖
+# 可选 peer 依赖,按需安装:
+npm i -D @vue/compiler-sfc          # Vue adapter
+npm i -D @angular/compiler          # Angular adapter
+npm i -D @babel/parser              # React adapter 与一层依赖追踪
 ```
 
 ### 给 Vue 项目打标(库方式)
@@ -191,6 +197,7 @@ console.log(affectedTestsToMarkdown(affectedTests(diff, map)));
 ```bash
 npm run cli -- tag src/app --registry ./reg                  # HTML 类模板(默认 --ext .html)
 npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFC(自动选用 VueAdapter)
+npm run cli -- tag src --ext .jsx,.tsx --registry ./reg      # React(自动选用 ReactAdapter)
 npm run cli -- tag src --ext .vue --check                    # CI 闸门:不写盘,需要打标则 exit 1
 npm run cli -- diff 1 2 --registry ./reg
 npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
@@ -206,8 +213,8 @@ npm run serve            # 可选:在 :7337 启动 node:http 后端;任意命令
 (`examples/ci/` 下有可直接复制的路由脚本与 GitHub Actions workflow);设计依据见
 `docs/superpowers/specs/2026-06-11-ci-integration-design.md`。
 
-adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 HTML);
-`--adapter <html|vue|angular>` 可覆盖;混合两类文件的运行会被明确报错拒绝。嵌入式与远程可互换:
+adapter 会根据匹配到的文件自动选择(`.vue` → Vue,`.jsx`/`.tsx` → React,含 `(click)=` /
+`*ngIf` 等 Angular 特征的 `.html` → Angular,其余 → HTML);`--adapter <html|vue|angular|react>` 可覆盖;混合两类文件的运行会被明确报错拒绝。嵌入式与远程可互换:
 同一个 `TestIdService` 背后,`LocalTransport`(进程内)或 `HttpTransport`(REST)
 任选其一,调用代码完全一致。
 
@@ -225,6 +232,9 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
 | 按钮文案 "Sign in" → "Log in" | id 冻结;diff:`modified { text }`——只有断言了文案的用例才需要看 |
 | 新增一个字段 | diff:`1 added`,其余一切不动 |
 | 只改 `onSubmit` 的**函数体**(模板未动) | id 全冻结、0 文件重写;diff:恰好接线到它的 form + button 报 `modified { symbol:onSubmit }` → 其用例路由为重测 |
+| 改 `api.js` 里被 `onSubmit` 调用的 `createOrder` | 页面一字未动;diff:`modified { dep:onSubmit>createOrder }` → 同样的用例路由为重测 |
+| 改 `createOrder` 再调用的 `validate`(第三层) | 按设计不产生 diff 条目;`tag` 把它列为 BEYOND tracking depth,`affected` 把相关测试列为兜底 |
+| 给已打标按钮换 handler(`onClick={submit}` → `onClick={cancel}`) | id 不变(sticky);diff 标出**锚点漂移**——这个 id 现在锚定的是另一个动作 |
 | 删除一个元素 | diff:`removed`;其常量消失 → 引用它的测试编译失败;报告给出 `retire` |
 | 无稳定信号的交互元素(`<button>OK</button>`) | 照常打标,但警告:如需稳定请加 `data-tid` |
 | 纯文案展示标签(`h1`–`h6`、`th`、`label`) | 默认跳过(`skipTags`)——加 `data-tid` 可选入;已写入的 id 仍 sticky 保留 |
@@ -236,16 +246,16 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
 | --- | --- | --- |
 | Adapters | `src/adapters/{contract,html,vue,angular,react}.ts` | **是——仅此层** |
 | Core 引擎 | `src/core/{types,signals,identity,fingerprint,classify,format,sourcedeps,engine}.ts` | 否(纯函数) |
-| Registry | `src/registry/{storage,registry,diff}.ts` | 否 |
+| Registry | `src/registry/{storage,registry,diff,postgres}.ts` | 否 |
 | 定位器与常量 | `src/locators/` | 否 |
 | 测试映射 | `src/testmap/` | 否 |
 | 后端 | `src/server/`(`TestIdService` + `node:http` 外壳) | 否 |
-| 客户端 | `src/client/{transport,pipeline}.ts` | 否 |
+| 客户端 | `src/client/{transport,pipeline,deps}.ts`(`deps` = 一层 JS/TS 依赖解析器) | 否 |
 | CLI | `src/cli.ts` | 否 |
 
 依赖只向下;core 除 `node:crypto` 外零依赖。新增一个框架 = 实现一个 adapter
-(`parse`、`write`,以及可选的 `resolveSymbolDefs`,即 L2 能力)。现有 adapter:
-**Vue**、**Angular**(AST 驱动;Angular 模板与普通 HTML 同为 `.html` 扩展名,CLI 按内容特征自动识别)与 **React**(JSX/TSX,`@babel/parser`;一个 JSX 源节点对应 N 个运行时实例,故 identity 仅由 props 构建、各实例共享同一 id),另有 **HTML**(正则扫描器,演示级)。
+(`parse`、`write`,以及可选的 `resolveSymbolDefs`(直接引用的符号定义)与 `scriptContext`(一层依赖追踪))。现有 adapter:
+**Vue**、**Angular**(AST 驱动;Angular 模板与普通 HTML 同为 `.html` 扩展名,CLI 按内容特征自动识别)与 **React**(JSX/TSX,`@babel/parser`;一个 JSX 源节点对应 N 个运行时实例,故 identity 仅由 props 构建、各实例共享同一 id),另有 **HTML**(手写的、识别引号的扫描器)。
 
 ## 不变量
 
@@ -253,7 +263,7 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
 2. `static_attributes` 只进指纹——永不进 identity。
 3. id 是元素自身信号的纯函数;无随机数、无计数器。
 4. 单次解析内每个产出的 id 都唯一。
-5. 写回幂等(先剥离旧 testid 再写入)。
+5. 写回幂等且最小侵入:只插入属性(替换标签自身已有的 testid),去掉它即可逐字节还原源码。
 6. 已写入的 id 即 sticky;只有 `--regenerate` 会重铸。
 7. adapter 只填信号槽位、只解析定义*文本*;策略、哈希与 diff 由 core 持有。
 
@@ -279,7 +289,7 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
 ## 开发
 
 ```bash
-npm test            # vitest(152 个测试)
+npm test            # vitest(291 个测试)
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 npm run demo        # HTML 端到端演示

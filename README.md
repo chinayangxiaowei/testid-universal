@@ -104,18 +104,21 @@ no similarity threshold anywhere — every signal is exact.
 
 ### 5. testID → test-case map (fail-closed)
 
-`generateConstants(snapshot)` emits a `testIds` module. Tests import constants instead of
-hardcoding strings, so a removed or renamed id **fails to compile** — never a silent
-runtime mismatch. `buildTestMap(testFiles, snapshot)` scans test sources (constant refs +
-raw id strings) into `id → [test files]`, and `affectedTests(diff, map)` turns a diff into
-a routed action list: **`write-new` / `retire` / `re-test`**.
+`generateConstants(snapshot)` emits a `testIds` module (TS, or plain JS with a JSDoc
+`@type {const}` when the target is `.js`). Tests import constants instead of hardcoding
+strings, so a removed or renamed id **fails to compile** — never a silent runtime mismatch.
+Test sources are scanned (constant refs + raw id strings) into an id → test map, and a diff
+becomes a routed action list: **`write-new` / `retire` / `re-test`** — at case level by
+default (`affectedTestCases`: the exact `test(...)` block), or per file (`affectedTests`).
+A sticky id whose element now has a different identity is flagged **anchor drift**, so the
+test's intent gets re-checked, not just re-run.
 
 ### 6. testID → source-dependency map (re-test even when the id didn't change)
 
 For each element, the core selects the symbols it directly references (handler names,
 bound-identifier roots, `v-model` targets); the adapter resolves them to their
-**definition source text** (Vue: `<script setup>` top-level declarations via
-`@vue/compiler-sfc`); the core hashes the text (whitespace-insensitive) into
+**definition source text** (Vue: `<script setup>` declarations; React: the JSX file itself;
+Angular: the component's companion `.ts`); the core hashes the text (whitespace-insensitive) into
 `symbol_defs`. When a definition body changes — even with the id frozen and the markup
 untouched — the diff reports `modified` with `symbol:<name>`, and the linked tests are
 routed to `re-test`.
@@ -137,8 +140,8 @@ silently treated as unchanged). What lies beyond the hop is not hashed but **nam
 `tag` prints the BEYOND-depth dependencies (`submit>createOrder>validate`, a sibling
 `this.persist()`, `(dynamic) handlers[mode]`), the registry keeps them as `dep_limited`, and
 `affected` appends a "⚠ Beyond tracking depth" section listing the tests to fall back to
-(or run the full suite) when such code changes — two hops tracked never reads as "safe". Cross-file changes are only seen when the dependent file
-is in the `tag` run (tag the whole source tree, not just changed files). Frameworks /
+(or run the full suite) when such code changes — two hops tracked never reads as "safe".
+Cross-file changes are only seen when the dependent file is in the `tag` run (tag the whole source tree, not just changed files). Frameworks /
 adapters without the capability degrade to name-only tracking. Registries created before
 symbol or dep tracking upgrade with zero noise (first run records the baseline; dep keys
 are compared only when present on both sides).
@@ -147,9 +150,15 @@ are compared only when present on both sides).
 
 > Step-by-step tutorial, full CLI/config/warning references, and FAQ: **[USAGE.md](./USAGE.md)**.
 
+Not on npm yet: clone and build, then depend on the local checkout.
+
 ```bash
-npm install            # zero runtime deps in core
-npm i -D @vue/compiler-sfc   # only if you use the Vue adapter (optional peer dep)
+git clone https://github.com/chinayangxiaowei/testid-universal && (cd testid-universal && npm ci && npm run build)
+npm i -D file:../testid-universal   # from your project; zero runtime deps in core
+# optional peer deps, only for what you use:
+npm i -D @vue/compiler-sfc          # Vue adapter
+npm i -D @angular/compiler          # Angular adapter
+npm i -D @babel/parser              # React adapter and one-hop dependency tracking
 ```
 
 ### Tag a Vue project (library)
@@ -206,6 +215,7 @@ A `modified` id (markup field OR `symbol:<name>` change) routes its tests to `re
 ```bash
 npm run cli -- tag src/app --registry ./reg                  # HTML-like templates (default --ext .html)
 npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFCs (VueAdapter picked automatically)
+npm run cli -- tag src --ext .jsx,.tsx --registry ./reg      # React (ReactAdapter picked automatically)
 npm run cli -- tag src --ext .vue --check                    # CI gate: writes nothing, exit 1 if tagging is needed
 npm run cli -- diff 1 2 --registry ./reg
 npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
@@ -222,8 +232,9 @@ tests; guard an empty list — `playwright test` with no filter runs everything)
 script + GitHub Actions workflow in `examples/ci/`); design rationale in
 `docs/superpowers/specs/2026-06-11-ci-integration-design.md`.
 
-The adapter is picked from the matched files (`.vue` → `VueAdapter`, otherwise HTML);
-`--adapter <html|vue|angular>` overrides, and mixed runs are rejected with a clear error. Embedded
+The adapter is picked from the matched files (`.vue` → Vue, `.jsx`/`.tsx` → React, `.html`
+with Angular markers such as `(click)=` / `*ngIf` → Angular, otherwise HTML);
+`--adapter <html|vue|angular|react>` overrides, and mixed runs are rejected with a clear error. Embedded
 and remote are interchangeable: the same `TestIdService` sits behind a `LocalTransport`
 (in-process) or `HttpTransport` (REST), and calling code is identical.
 
@@ -242,6 +253,9 @@ other runner can consume the framework-agnostic `gen-constants` module directly.
 | Change button copy "Sign in" → "Log in" | id frozen; diff: `modified { text }` — re-test only if you assert the label |
 | Add a field | diff: `1 added`, nothing else moves |
 | Edit `onSubmit`'s **function body** (template untouched) | ids frozen, 0 files rewritten; diff: `modified { symbol:onSubmit }` on exactly the form + button wired to it → their tests are routed to re-test |
+| Edit `createOrder` in `api.js`, which `onSubmit` calls | page untouched; diff: `modified { dep:onSubmit>createOrder }` → the same tests are routed to re-test |
+| Edit `validate`, which `createOrder` calls (layer 3) | no diff entry by design; `tag` names it BEYOND tracking depth and `affected` lists its tests as fallback |
+| Swap the handler on a tagged button (`onClick={submit}` → `onClick={cancel}`) | id stays (sticky); diff flags **anchor drift** — the id now anchors a different action |
 | Delete an element | diff: `removed`; its constant vanishes → referencing tests fail to compile; report says `retire` |
 | Interactive element with no stable signal (`<button>OK</button>`) | tagged, but warned: add a `data-tid` if you need it stable |
 | Copy-only presentation tag (`h1`–`h6`, `th`, `label`) | skipped by default (`skipTags`) — opt in with a `data-tid`; already-written ids stay sticky |
@@ -253,19 +267,19 @@ other runner can consume the framework-agnostic `gen-constants` module directly.
 | --- | --- | --- |
 | Adapters | `src/adapters/{contract,html,vue,angular,react}.ts` | **yes — only here** |
 | Core engine | `src/core/{types,signals,identity,fingerprint,classify,format,sourcedeps,engine}.ts` | no (pure) |
-| Registry | `src/registry/{storage,registry,diff}.ts` | no |
+| Registry | `src/registry/{storage,registry,diff,postgres}.ts` | no |
 | Locators & constants | `src/locators/` | no |
 | Test map | `src/testmap/` | no |
 | Backend | `src/server/` (`TestIdService` + `node:http` shell) | no |
-| Client | `src/client/{transport,pipeline}.ts` | no |
+| Client | `src/client/{transport,pipeline,deps}.ts` (`deps` = one-hop JS/TS resolver) | no |
 | CLI | `src/cli.ts` | no |
 
 Dependencies point downward; the core depends on nothing but `node:crypto`. A new
 framework = one adapter implementing `parse`, `write`, and optionally
-`resolveSymbolDefs` (the L2 capability). Adapters today: **Vue**, **Angular** (AST-backed; Angular templates are content-sniffed
+`resolveSymbolDefs` (direct symbol definitions) and `scriptContext` (one-hop tracking). Adapters today: **Vue**, **Angular** (AST-backed; Angular templates are content-sniffed
 automatically since they share the `.html` extension) and **React** (JSX/TSX via
 `@babel/parser`; one JSX source node renders N runtime instances, so identity is built
-from props only and instances share one id), plus **HTML** (regex scanner, demo-grade).
+from props only and instances share one id), plus **HTML** (hand-written quote-aware scanner).
 
 ## Invariants
 
@@ -273,7 +287,8 @@ from props only and instances share one id), plus **HTML** (regex scanner, demo-
 2. `static_attributes` feeds the fingerprint only — never identity.
 3. An id is a pure function of the element's own signals; no randomness, no counters.
 4. Every emitted id is unique within a parse.
-5. Writes are idempotent (existing testids are stripped before re-adding).
+5. Writes are idempotent and minimally invasive: only the attribute is inserted (a tag's own
+   existing testid is replaced), so removing it restores the source byte-for-byte.
 6. A written id is sticky; only `--regenerate` re-mints.
 7. Adapters fill signal slots and resolve definition *text*; policy, hashing, and diffing
    are core-owned.
@@ -302,7 +317,7 @@ from props only and instances share one id), plus **HTML** (regex scanner, demo-
 ## Development
 
 ```bash
-npm test            # vitest (152 tests)
+npm test            # vitest (291 tests)
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 npm run demo        # HTML end-to-end demo
