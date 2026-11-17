@@ -1,8 +1,37 @@
 {
   "name": "testid-universal",
   "version": "0.1.0",
-  "description": "Framework-agnostic build-time TestID engine: semantic key -> fingerprint -> deterministic id -> versioned registry -> diff -> locators.",
+  "description": "Know which e2e tests to rerun after any code change: stable data-testid anchors + source-dependency tracking for Vue, React, Angular and HTML.",
+  "keywords": [
+    "data-testid",
+    "testid",
+    "test-automation",
+    "e2e",
+    "e2e-testing",
+    "end-to-end-testing",
+    "playwright",
+    "cypress",
+    "selenium",
+    "webdriverio",
+    "test-maintenance",
+    "test-impact-analysis",
+    "regression-test-selection",
+    "selective-testing",
+    "locators",
+    "vue",
+    "react",
+    "angular",
+    "ci"
+  ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chinayangxiaowei/testid-universal.git"
+  },
+  "homepage": "https://github.com/chinayangxiaowei/testid-universal#readme",
+  "bugs": {
+    "url": "https://github.com/chinayangxiaowei/testid-universal/issues"
+  },
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "bin": {

@@ -1,5 +1,8 @@
 # testid-universal
 
+[![CI](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml/badge.svg)](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
 English | [简体中文](./README.zh-CN.md)
 
 A framework-agnostic, build-time **TestID engine** that makes `data-testid` a reliable

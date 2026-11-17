@@ -1,5 +1,8 @@
 # testid-universal
 
+[![CI](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml/badge.svg)](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
 [English](./README.md) | 简体中文
 
 一个框架无关的**构建期 TestID 引擎**,让 `data-testid` 成为自动化测试维护的可靠桥梁:
