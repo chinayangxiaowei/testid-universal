@@ -68,3 +68,51 @@ describe('HtmlTemplateAdapter skips non-content tags', () => {
     expect(tags).toContain('button');
   });
 });
+
+// Regression: the regex tag scanner ended a tag at the first '>' and treated '<x>'
+// anywhere as a tag, so write-back corrupted attribute values, comments and
+// script bodies. Every case asserts the written source keeps its original text
+// apart from the inserted ids, and re-tagging is idempotent.
+describe('HtmlTemplateAdapter quote/comment/raw-text aware scanning', () => {
+  const a = new HtmlTemplateAdapter();
+  const tagAll = (src: string) =>
+    a.write(src, a.parse(src, 'x.html', 'x').map((n, i) => ({ loc: n.loc!, attributeName: 'data-testid', id: `x__${n.tag}--${i}` })));
+  const tags = (src: string) => a.parse(src, 'x.html', 'x').map((n) => n.tag);
+  const stripIds = (s: string) => s.replace(/ data-testid="[^"]*"/g, '');
+
+  const cases: Record<string, { src: string; tags: string[] }> = {
+    '">" inside a double-quoted value': {
+      src: '<button title="a > b" (click)="go()">Go</button>', tags: ['button'],
+    },
+    '">" inside a single-quoted value': {
+      src: `<button title='a > b' (click)="go()">Go</button>`, tags: ['button'],
+    },
+    'a tag inside an attribute value': {
+      src: '<div title="<b>x</b>"><button (click)="go()">Go</button></div>', tags: ['div', 'button'],
+    },
+    'Angular expression with a comparison': {
+      src: '<button [disabled]="count > 3 && n < 2" (click)="go()">Go</button>', tags: ['button'],
+    },
+    'tags inside an HTML comment': {
+      src: '<!-- <button (click)="old()">Old</button> --><button (click)="go()">Go</button>', tags: ['button'],
+    },
+    '"<" inside a script / style body': {
+      src: '<script>if (a<b && c>d) {}</script><style>a>b{}</style><button (click)="go()">Go</button>', tags: ['button'],
+    },
+  };
+
+  for (const [name, c] of Object.entries(cases)) {
+    it(name, () => {
+      expect(tags(c.src)).toEqual(c.tags);
+      const once = tagAll(c.src);
+      expect(stripIds(once)).toBe(c.src);
+      expect(a.parse(once, 'x.html', 'x').map((n) => n.existingId)).toEqual(c.tags.map((t, i) => `x__${t}--${i}`));
+      expect(tagAll(once)).toBe(once);
+    });
+  }
+
+  it('reads attributes after a quoted ">" (signals not truncated)', () => {
+    const [btn] = a.parse('<button title="a > b" name="go" type="submit">Go</button>', 'x.html', 'x');
+    expect(btn.signals).toMatchObject({ name: 'go', type: 'submit', text: 'Go' });
+  });
+});

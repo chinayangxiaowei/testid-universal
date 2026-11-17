@@ -38,33 +38,31 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
 
   parse(source: string, file: string, component: string): ElementNode[] {
     const nodes: ElementNode[] = [];
-    // Match an opening tag and capture: tag name, attribute blob, end offset of the tag.
-    const tagRe = /<([a-zA-Z][\w-]*)((?:\s+[^<>]*?)?)\s*\/?>/g;
-    let m: RegExpExecArray | null;
     // Source ranges spanned by *ngFor subtrees (naive closing-tag scan, consistent
     // with this adapter's text extraction): elements starting inside one are inLoop.
     const loopRanges: { start: number; end: number }[] = [];
-    while ((m = tagRe.exec(source)) !== null) {
-      const tag = m[1];
+    for (const m of scanOpenTags(source)) {
+      const tag = m.tag;
       // Structural/non-content tags are never test targets; their text is code or
       // metadata, not UI copy (a real served page surfaced <script>/<title> noise).
       if (['template', 'ng-container', 'ng-template', 'script', 'style', 'title', 'head'].includes(tag.toLowerCase())) continue;
-      const attrBlob = m[2] ?? '';
+      const attrBlob = m.attrBlob;
+      const after = m.end + 1;
       const attrs = parseAttrs(attrBlob);
 
       const hasNgFor = attrBlob.includes('*ngFor') || attrBlob.includes('*ngfor');
       if (hasNgFor && !VOID_TAGS.has(tag.toLowerCase())) {
-        const close = source.indexOf(`</${tag}`, tagRe.lastIndex);
-        loopRanges.push({ start: m.index, end: close === -1 ? source.length : close });
+        const close = source.indexOf(`</${tag}`, after);
+        loopRanges.push({ start: m.start, end: close === -1 ? source.length : close });
       }
-      const inLoop = hasNgFor || loopRanges.some((r) => m!.index > r.start && m!.index < r.end);
+      const inLoop = hasNgFor || loopRanges.some((r) => m.start > r.start && m.start < r.end);
 
       // Capture direct text content for non-void tags (used as text_content hint).
       let text: string | null = null;
       if (!VOID_TAGS.has(tag.toLowerCase())) {
-        const close = source.indexOf(`</${tag}`, tagRe.lastIndex);
+        const close = source.indexOf(`</${tag}`, after);
         if (close !== -1) {
-          const inner = source.slice(tagRe.lastIndex, close);
+          const inner = source.slice(after, close);
           if (!/[<]/.test(inner)) { const t = inner.trim(); if (t) text = t; }
         }
       }
@@ -72,11 +70,10 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
       const signals = normalize(attrs);
       if (text) signals.text = text;
 
-      const tagEnd = m.index + m[0].length - 1;
       nodes.push({
         component, tag, signals,
         existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
-        loc: { file, start: m.index, end: tagEnd },
+        loc: { file, start: m.start, end: m.end },
         inLoop,
       });
     }
@@ -86,6 +83,52 @@ export class HtmlTemplateAdapter implements FrameworkAdapter {
   write(source: string, edits: Edit[]): string {
     // Idempotent opening-tag rewrite, shared with the Vue adapter.
     return applyTestIdEdits(source, edits);
+  }
+}
+
+/** Elements whose body is raw text (never markup) — skipped wholesale by the scanner. */
+const RAW_TEXT_TAGS = new Set(['script', 'style', 'textarea', 'title']);
+
+interface OpenTag { tag: string; attrBlob: string; start: number; end: number }
+
+/**
+ * Quote-aware opening-tag scanner (still not a spec parser). A tag ends at the
+ * first '>' OUTSIDE a quoted attribute value, so `title="a > b"` and
+ * `[x]="n > 3"` stay inside the tag; '<' inside a quoted value is not a tag;
+ * `<!-- … -->` comments and raw-text bodies (script/style/textarea/title) are
+ * skipped. `end` is the offset of the tag's closing '>' (the write-back contract).
+ */
+function* scanOpenTags(source: string): Generator<OpenTag> {
+  let i = 0;
+  while (i < source.length) {
+    const lt = source.indexOf('<', i);
+    if (lt === -1) return;
+    if (source.startsWith('<!--', lt)) {
+      const close = source.indexOf('-->', lt + 4);
+      if (close === -1) return;
+      i = close + 3;
+      continue;
+    }
+    const name = /^<([a-zA-Z][\w-]*)(?=[\s/>])/.exec(source.slice(lt, lt + 256));
+    if (!name) { i = lt + 1; continue; }
+    let j = lt + name[0].length;
+    let quote: string | null = null;
+    let end = -1;
+    for (; j < source.length; j++) {
+      const ch = source[j];
+      if (quote) { if (ch === quote) quote = null; }
+      else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === '>') { end = j; break; }
+      else if (ch === '<') break; // unquoted '<' — not a well-formed tag
+    }
+    if (end === -1) { i = lt + 1; continue; }
+    const tag = name[1];
+    yield { tag, attrBlob: source.slice(lt + name[0].length, end).replace(/\s*\/?\s*$/, ''), start: lt, end };
+    i = end + 1;
+    if (RAW_TEXT_TAGS.has(tag.toLowerCase())) {
+      const close = source.toLowerCase().indexOf(`</${tag.toLowerCase()}`, i);
+      i = close === -1 ? source.length : close;
+    }
   }
 }
 
