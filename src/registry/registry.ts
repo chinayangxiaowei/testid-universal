@@ -79,6 +79,7 @@ export async function reconcile(
       disambiguator: d.disambiguator,
       symbol_defs: d.symbol_defs,
       ...(d.dep_defs ? { dep_defs: d.dep_defs } : {}),
+      ...(d.dep_limited?.length ? { dep_limited: d.dep_limited } : {}),
       signals: d.signals,
       file: d.loc?.file ?? existing?.file,
       source,

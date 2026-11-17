@@ -333,3 +333,147 @@ export class PageComponent {
     expect(fields).toEqual(['page__button--submit dep:submit>svc.create']);
   });
 });
+
+// Honest degradation (downstream): what a hop-1 definition ITSELF depends on (layer 3)
+// and dynamic dispatch are not tracked — but they must be REPORTED, never silently
+// green. `dep_limited` lists them per element; it is a report, not a change signal.
+describe('dep_limited — beyond-depth & dynamic dispatch are reported', () => {
+  const PAGE = `import { createOrder } from './api';
+const Page = ({ form }) => { const submit = () => createOrder(form); return <button onClick={submit}>Go</button>; };
+`;
+  const limitedOf = async (files: Files, page = 'src/Page.jsx') => {
+    const { r1, snap } = await twoRuns(react, files, [page], {});
+    const e = Object.values(snap.entries)[0];
+    return { stats: r1.deps.limited, entry: e.dep_limited ?? [] };
+  };
+
+  it('layer 3 in the same module: createOrder -> validate', async () => {
+    const { stats, entry } = await limitedOf({
+      'src/api.js': `function validate(f) { return f.total > 0; }
+export function createOrder(form) { validate(form); return post('/orders', form); }
+`,
+      'src/Page.jsx': PAGE,
+    });
+    expect(entry).toEqual(['submit>createOrder>validate']);
+    expect(stats).toEqual(['submit>createOrder>validate']);
+  });
+
+  it('layer 3 through a relative import of the hop-1 module', async () => {
+    const { entry } = await limitedOf({
+      'src/validate.js': `export const validate = (f) => f.total > 0;`,
+      'src/api.js': `import { validate } from './validate';
+export function createOrder(form) { validate(form); return post('/orders', form); }
+`,
+      'src/Page.jsx': PAGE,
+    });
+    expect(entry).toEqual(['submit>createOrder>validate']);
+  });
+
+  it('bare packages and globals in the hop-1 body are out of scope by design (not reported)', async () => {
+    const { entry, stats } = await limitedOf({
+      'src/api.js': `import axios from 'axios';
+export function createOrder(form) { console.log(form); return axios.post('/orders', form); }
+`,
+      'src/Page.jsx': PAGE,
+    });
+    expect(entry).toEqual([]);
+    expect(stats).toEqual([]);
+  });
+
+  it('same-file helper calling another same-file helper', async () => {
+    const { entry } = await limitedOf({
+      'src/Page.jsx': `function normalize(f) { return f; }
+function validate(f) { return normalize(f).total > 0; }
+const Page = ({ form }) => { const submit = () => validate(form); return <button onClick={submit}>Go</button>; };
+`,
+    });
+    expect(entry).toEqual(['submit>validate>normalize']);
+  });
+
+  it('dynamic dispatch in the handler (computed member call) is reported', async () => {
+    const { entry } = await limitedOf({
+      'src/Page.jsx': `const handlers = { a: () => 1, b: () => 2 };
+const Page = ({ mode }) => { const submit = () => handlers[mode](); return <button onClick={submit}>Go</button>; };
+`,
+    });
+    expect(entry).toContain('submit>(dynamic) handlers[mode]');
+  });
+
+  it('dynamic dispatch in a hop-1 body (calling a callback parameter) is reported', async () => {
+    const { entry } = await limitedOf({
+      'src/api.js': `export function createOrder(form, done) { done(form); }`,
+      'src/Page.jsx': PAGE,
+    });
+    expect(entry).toEqual(['submit>createOrder>(dynamic) done']);
+  });
+
+  it('a template-referenced import: what it calls is beyond depth', async () => {
+    const { entry } = await limitedOf({
+      'src/api.js': `function validate(f) { return !!f; }
+export function createOrder(form) { return validate(form); }
+`,
+      'src/Page.jsx': `import { createOrder } from './api';
+const Page = () => <button onClick={createOrder}>Go</button>;
+`,
+    });
+    expect(entry).toEqual(['createOrder>createOrder>validate']);
+  });
+
+  it('--no-deps reports nothing', async () => {
+    const { r1 } = await twoRuns(react, {
+      'src/api.js': `function validate(f) { return f; }\nexport function createOrder(form) { return validate(form); }\n`,
+      'src/Page.jsx': PAGE,
+    }, ['src/Page.jsx'], {}, { deps: false });
+    expect(r1.deps.limited).toEqual([]);
+  });
+
+  it('dep_limited is a report, not a change signal: gaining a layer-3 ref only flags via the hop-1 text', async () => {
+    const { diff } = await twoRuns(react, {
+      'src/api.js': `export function createOrder(form) { return form; }\n`,
+      'src/Page.jsx': PAGE,
+    }, ['src/Page.jsx'], { 'src/api.js': `function v(f) { return f; }\nexport function createOrder(form) { return form; }\n` });
+    expect(diff.summary.modified).toBe(0); // v is unused by createOrder: nothing changed in scope
+  });
+});
+
+describe('dep scoping — parameters shadow same-named declarations elsewhere in the module', () => {
+  it('a hop-1 param named like another function\'s local is not a dependency (fast-team store repro)', async () => {
+    const { r1 } = await twoRuns(react, {
+      'src/useStore.js': `export function useStore() {
+  return {
+    add(input) { const id = 't-' + input.n; return id; },
+    claim(id, by) { return [id, by]; },
+  };
+}
+`,
+      'src/Page.jsx': `import { useStore } from './useStore';
+const Page = () => { const s = useStore(); const go = () => s.claim('x', 'me'); return <button onClick={go}>Go</button>; };
+`,
+    }, ['src/Page.jsx'], {});
+    expect(r1.deps.limited).toEqual([]);
+  });
+});
+
+describe('dep_limited — options-object `this.<method>()` (Pinia actions)', () => {
+  it('an action calling a sibling via this.persist() is reported beyond depth', async () => {
+    const { r1 } = await twoRuns(() => new VueAdapter(), {
+      'src/stores/tasks.ts': `import { defineStore } from 'pinia';
+export const useTaskStore = defineStore('tasks', {
+  state: () => ({ tasks: [] as string[] }),
+  actions: {
+    persist() { localStorage.setItem('k', JSON.stringify(this.tasks)); },
+    claimTask(id: string) { this.tasks.push(id); this.persist(); },
+  },
+});
+`,
+      'src/Page.vue': `<script setup lang="ts">
+import { useTaskStore } from './stores/tasks';
+const tasks = useTaskStore();
+function claim() { tasks.claimTask('x'); }
+</script>
+<template><button @click="claim">Claim</button></template>
+`,
+    }, ['src/Page.vue'], {});
+    expect(r1.deps.limited).toContain('claim>tasks.claimTask>this.persist');
+  });
+});

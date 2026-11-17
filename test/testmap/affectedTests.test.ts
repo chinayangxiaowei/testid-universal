@@ -41,3 +41,31 @@ describe('affectedTestsToMarkdown', () => {
     expect(md).toContain('spec/x.spec.ts');
   });
 });
+
+// Downstream: affected must not read as "safe" for tests whose elements depend on code
+// beyond tracking depth — it lists them with a full-suite fallback hint.
+import { depthLimitedTests, depthLimitedToMarkdown } from '../../src/testmap';
+import { snapshot as snap2, entry as entry2 } from '../helpers';
+
+describe('depthLimitedTests', () => {
+  const s = snap2(3, {
+    'p__button--submit': entry2({ fingerprint: 'F', dep_limited: ['submit>createOrder>validate'] }),
+    'p__button--cancel': entry2({ fingerprint: 'G' }),
+    'p__button--orphan': entry2({ fingerprint: 'H', dep_limited: ['x>y>z'] }),
+  });
+  const map = { 'p__button--submit': ['order.spec.ts'], 'p__button--cancel': ['order.spec.ts'] };
+
+  it('lists only tested ids whose dependency chain goes beyond tracking depth', () => {
+    expect(depthLimitedTests(s, map)).toEqual([
+      { id: 'p__button--submit', limits: ['submit>createOrder>validate'], tests: ['order.spec.ts'] },
+    ]);
+  });
+
+  it('markdown names the fallback and stays empty when nothing is limited', () => {
+    const md = depthLimitedToMarkdown(depthLimitedTests(s, map));
+    expect(md).toMatch(/beyond tracking depth/i);
+    expect(md).toMatch(/full suite/i);
+    expect(md).toContain('submit>createOrder>validate');
+    expect(depthLimitedToMarkdown([])).toBe('');
+  });
+});

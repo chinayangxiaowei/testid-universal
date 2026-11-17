@@ -59,6 +59,17 @@ only hashes text (`hashSymbolSources`), so adapters still cannot fabricate hashe
 ## Honest boundary (documented in README / USAGE)
 
 - Not followed: the dependency's own calls (layer 3), bare packages, dynamic dispatch.
+- **Reported, not followed (`dep_limited`).** For each hop-1 definition the resolver
+  collects what IT references in its own module (local helpers, relative/aliased imports,
+  injected services, `this.<m>()` on an options object) plus dynamic dispatch anywhere in
+  the handler or hop-1 body (`obj[key]()` with a non-literal key, calling a parameter).
+  Labels: `<sym>><ref>><layer3>` / `<sym>>[<ref>>](dynamic) <callee>`. Bare packages and
+  globals stay silent. Stored per entry as `dep_limited` (never hashed, never diffed —
+  toggling it is noise-free); `tag` prints the list, `affected` appends a "Beyond
+  tracking depth" section naming the tests to fall back to. Function parameters inside a
+  definition shadow same-named module bindings (the module index is name-level, not
+  scope-aware), which also removed false hop-1 deps such as `(t) => t.id` → another
+  function's `const t`.
 - A local-looking import that cannot be resolved (unknown alias, missing file or export)
   is reported by `tag` as UNRESOLVED — never silently treated as unchanged.
 - Cross-file changes are only seen when the dependent file is in the `tag` run. Tag the

@@ -66,6 +66,8 @@ export interface RegistryEntry {
   symbol_defs: Record<string, string>;
   /** Layer-2 dep hashes; absent on legacy entries and when tracking was off. */
   dep_defs?: Record<string, string>;
+  /** Dependencies beyond tracking depth (layer 3 / dynamic); report only, never diffed. */
+  dep_limited?: string[];
   signals: NormalizedSignals;
   /** Source file this element lives in (scopes partial tag runs). Absent on legacy entries. */
   file?: string;

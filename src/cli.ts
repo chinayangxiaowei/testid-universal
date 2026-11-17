@@ -30,7 +30,7 @@ import { ReactAdapter } from './adapters/react';
 import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
 import { LocatorTarget, generateConstants, constantsLangForPath, ConstantsLang } from './locators';
-import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, buildTestCaseMapForIds, affectedTestCases, affectedTestCasesToMarkdown, coverageReport, coverageToMarkdown } from './testmap';
+import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, buildTestCaseMapForIds, affectedTestCases, affectedTestCasesToMarkdown, coverageReport, coverageToMarkdown, depthLimitedTests, depthLimitedToMarkdown } from './testmap';
 import { readRuntimeRecord } from './runtime';
 
 function parseArgs(argv: string[]) {
@@ -141,6 +141,13 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
     if (result.deps.unresolved.length) {
       console.warn(`dep tracking: ${result.deps.unresolved.length} local import(s) UNRESOLVED -- changes there will NOT trigger re-tests:`);
       for (const u of result.deps.unresolved) console.warn(`  - ${u}`);
+    }
+    if (result.deps.limited.length) {
+      // Honest boundary: layer 3+ and dynamic dispatch are named, never silently green.
+      const shown = result.deps.limited.slice(0, 10);
+      console.warn(`dep tracking: ${result.deps.limited.length} dependenc(ies) BEYOND tracking depth (layer 3+ / dynamic) -- changes there will NOT trigger re-tests; \`affected\` lists the tests to fall back to:`);
+      for (const l of shown) console.warn(`  - ${l}`);
+      if (result.deps.limited.length > shown.length) console.warn(`  ... ${result.deps.limited.length - shown.length} more (see dep_limited in the registry)`);
     }
   }
   if (result.outOfScope > 0) {
@@ -257,6 +264,7 @@ async function cmdAffected(positional: string[], flags: Record<string, string | 
   if (flags['files-only']) {
     const affected = affectedTests(d, buildTestMapForIds(testFiles, ids));
     console.log(affectedTestsToMarkdown(affected));
+    await printDepthLimited(transport, testFiles);
     if (flags['out-list']) {
       const retest = [...new Set(affected.filter((a) => a.action === 're-test').flatMap((a) => a.tests))].sort();
       writeFileSync(flags['out-list'] as string, retest.join('\n') + (retest.length ? '\n' : ''));
@@ -266,6 +274,7 @@ async function cmdAffected(positional: string[], flags: Record<string, string | 
   }
   const affected = affectedTestCases(d, buildTestCaseMapForIds(testFiles, ids));
   console.log(affectedTestCasesToMarkdown(affected));
+  await printDepthLimited(transport, testFiles);
   if (flags['out-list']) {
     // Runners select by FILE, so the list stays file-level (the case detail is in
     // the printed report and, with --grep-out, as a title alternation).
@@ -279,6 +288,16 @@ async function cmdAffected(positional: string[], flags: Record<string, string | 
     writeFileSync(flags['grep-out'] as string, titles.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + (titles.length ? '\n' : ''));
     console.log(`wrote ${flags['grep-out']} (${titles.length} test title(s) for -g/-t)`);
   }
+}
+
+/** Append the beyond-depth fallback list (tests whose elements depend on untracked code). */
+async function printDepthLimited(transport: ReturnType<typeof createTransport>, testFiles: { file: string; source: string }[]) {
+  const latest = await transport.latest();
+  if (!latest) return;
+  const ids = Object.keys(latest.entries).filter((id) => latest.entries[id].dep_limited?.length);
+  if (!ids.length) return;
+  const md = depthLimitedToMarkdown(depthLimitedTests(latest, buildTestMapForIds(testFiles, ids)));
+  if (md) console.log(md);
 }
 
 async function cmdMarkGreen(flags: Record<string, string | boolean>) {

@@ -17,7 +17,10 @@
  * declaration is sliced (never the whole module), so a sibling export's edit does not
  * flag. The third hop (what createOrder itself calls) is NOT followed, nor are bare
  * packages (node_modules) or dynamic dispatch. A local-looking import that cannot be
- * resolved is reported in `unresolved` — never silently treated as unchanged.
+ * resolved is reported in `unresolved` — never silently treated as unchanged. What a
+ * hop-1 definition itself depends on (layer 3: a local helper, a relative import, an
+ * injected service) and dynamic dispatch (`obj[key]()`, calling a parameter) are
+ * reported in `limited` — not hashed, not a change signal, but never silently green.
  *
  * This lives in the client layer (it reads files); core only hashes the returned text.
  */
@@ -36,7 +39,15 @@ export interface DepResolution {
   byName: Record<string, Record<string, string>>;
   /** "<specifier>#<export>" for local-looking imports that could not be resolved. */
   unresolved: string[];
+  /**
+   * referenced symbol name -> sorted dependencies beyond tracking depth:
+   * "<name>><ref>><layer3>" or "<name>>[<ref>>](dynamic) <callee>".
+   */
+  limited: Record<string, string[]>;
 }
+
+/** A sliced declaration plus where it lives, so what IT depends on can be inspected. */
+interface Located { text: string; file: string; node: Node; self: string }
 
 type Node = any;
 type ImportBinding = { source: string; imported: string }; // imported: name | 'default' | '*'
@@ -174,6 +185,12 @@ function factoryOf(def: Node, host: HostIndex): string | null {
 function collectRefs(def: Node, self: string, host: HostIndex): Ref[] {
   const refs = new Map<string, Ref>();
   const own = new Set(def.type === 'VariableDeclarator' ? patternNames(def.id) : [self]);
+  // Parameters of any function inside the definition shadow module-level bindings
+  // (the module index is not scope-aware: `claim(id)` must not resolve to another
+  // function's `const id`). Name-level, so a param also hides a same-named outer ref.
+  walk(def, (n) => {
+    if (/Function|ClassMethod|ObjectMethod/.test(n.type)) for (const p of n.params ?? []) patternNames(p).forEach((x) => own.add(x));
+  });
   const within = (n: Node) => n.start >= def.start && n.end <= def.end;
   walk(def, (n, parent, key) => {
     // this.<prop>.<member>  (Angular injected service)   /   this.<method>  (same class)
@@ -229,6 +246,44 @@ interface TsPaths { dir: string; baseUrl: string | null; paths: [string, string[
 export class ModuleGraph {
   private files = new Map<string, { code: string; program: Node | null } | null>();
   private tsconfigs = new Map<string, TsPaths | null>();
+  private hosts = new Map<string, HostIndex | null>();
+
+  private hostOf(file: string): HostIndex | null {
+    if (!this.hosts.has(file)) {
+      const mod = this.load(file);
+      this.hosts.set(file, mod?.program ? indexHost(mod.program, mod.code) : null);
+    }
+    return this.hosts.get(file)!;
+  }
+
+  /**
+   * What a hop-1 definition itself depends on that is NOT tracked: local helpers,
+   * relative/aliased imports, injected services (layer 3), plus dynamic dispatch.
+   * Bare packages and globals stay out of scope, as everywhere else.
+   */
+  private beyond(loc: { node: Node; self: string; file: string; host: HostIndex }): string[] {
+    const out: string[] = [];
+    const notBare = (source: string) => this.resolveSpecifier(source, loc.file) !== 'bare';
+    for (const r of collectRefs(loc.node, loc.self, loc.host)) {
+      if (r.kind === 'local' || r.kind === 'service') out.push(r.key);
+      else if (r.kind === 'import' || r.kind === 'ns') {
+        if (notBare(loc.host.imports.get(r.name)!.source)) out.push(r.key);
+      } else if (r.kind === 'alias') {
+        const callee = factoryOf(loc.host.decls.get(r.name)!.def, loc.host)!;
+        if (notBare(loc.host.imports.get(callee)!.source)) out.push(r.key);
+      }
+    }
+    // `this.<m>()` outside a known class (an options-object store action calling a
+    // sibling action, `this.persist()`): a real dependency the index cannot slice.
+    walk(loc.node, (n) => {
+      const c = n.type === 'CallExpression' ? n.callee : null;
+      if (c?.type === 'MemberExpression' && !c.computed && c.object?.type === 'ThisExpression' && c.property?.type === 'Identifier') {
+        const m = c.property.name;
+        if (m !== loc.self && !out.includes(m) && !out.some((k) => k.startsWith(`${m}.`))) out.push(`this.${m}`);
+      }
+    });
+    return [...new Set(out), ...dynamicCalls(loc.node, loc.host.code)];
+  }
 
   private load(path: string) {
     if (!this.files.has(path)) {
@@ -309,22 +364,29 @@ export class ModuleGraph {
   }
 
   /** The declaration text a module exports under `name` (re-exports followed). */
-  exportText(file: string, name: string, member?: string, hops = 0, seen = new Set<string>()): string | null {
+  exportText(file: string, name: string, member?: string): string | null {
+    return this.exportDecl(file, name, member)?.text ?? null;
+  }
+
+  /** Like exportText, but also returns the declaration node and its file. */
+  exportDecl(file: string, name: string, member?: string, hops = 0, seen = new Set<string>()): Located | null {
     const tag = `${file}#${name}`;
     if (hops > MAX_REEXPORT_HOPS || seen.has(tag)) return null;
     seen.add(tag);
     const mod = this.load(file);
     if (!mod?.program) return null;
     const { code, program } = mod;
-    const slice = (n: Node) => code.slice(n.start, n.end);
     // With `member`, slice only that member's definition inside the export (a class
     // method, a store action, a hook's returned function); null if it is not there.
-    const sliceDecl = (stmt: Node, _decl?: Node): string | null => (member ? findMember(stmt, member, code) : slice(stmt));
-    const follow = (source: string, imported: string) => {
-      const f = this.resolveSpecifier(source, file);
-      return typeof f === 'string' && f !== 'bare' ? this.exportText(f, imported, member, hops + 1, seen) : null;
+    const sliceDecl = (stmt: Node, _decl?: Node): Located | null => {
+      const n = member ? findMemberNode(stmt, member) : stmt;
+      return n ? { text: code.slice(n.start, n.end), file, node: n, self: member ?? name } : null;
     };
-    const localDecl = (local: string): string | null => {
+    const follow = (source: string, imported: string): Located | null => {
+      const f = this.resolveSpecifier(source, file);
+      return typeof f === 'string' && f !== 'bare' ? this.exportDecl(f, imported, member, hops + 1, seen) : null;
+    };
+    const localDecl = (local: string): Located | null => {
       for (const stmt of program.body) {
         const d = stmt.type === 'ExportNamedDeclaration' && stmt.declaration ? stmt.declaration : stmt;
         if ((d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration') && d.id?.name === local) return sliceDecl(stmt, d);
@@ -370,33 +432,43 @@ export class ModuleGraph {
 
   /** Resolve the layer-2 deps of each referenced name in one host script. */
   resolve(names: string[], ctx: ScriptContext): DepResolution {
-    const out: DepResolution = { byName: {}, unresolved: [] };
+    const out: DepResolution = { byName: {}, unresolved: [], limited: {} };
     const program = parseModule(ctx.code, ctx.path);
     if (!program) return out;
     const host = indexHost(program, ctx.code);
-    const viaImport = (ref: string, imp: ImportBinding, member?: string): string | null => {
+    const viaImport = (ref: string, imp: ImportBinding, member?: string): Located | null => {
       const file = this.resolveSpecifier(imp.source, ctx.path);
       if (file === 'bare') return null;
       const exportName = imp.imported === '*' ? member! : imp.imported;
-      const text = file ? this.exportText(file, exportName, imp.imported === '*' ? undefined : member) : null;
-      if (text == null) out.unresolved.push(`${imp.source}#${member && imp.imported !== '*' ? `${exportName}.${member}` : exportName}`);
-      return text;
+      const loc = file ? this.exportDecl(file, exportName, imp.imported === '*' ? undefined : member) : null;
+      if (loc == null) out.unresolved.push(`${imp.source}#${member && imp.imported !== '*' ? `${exportName}.${member}` : exportName}`);
+      return loc;
     };
+    const hostLoc = (node: Node, self: string): Located =>
+      ({ text: ctx.code.slice(node.start, node.end), file: ctx.path, node, self });
     for (const name of names) {
       const deps: Record<string, string> = {};
+      const limited: string[] = [];
+      const noteBeyond = (prefix: string, loc: Located | null) => {
+        const h = loc && (loc.file === ctx.path ? host : this.hostOf(loc.file));
+        if (loc && h) for (const b of this.beyond({ ...loc, host: h })) limited.push(`${prefix}>${b}`);
+      };
       const imp = host.imports.get(name);
       if (imp && imp.imported !== '*') {
         // A template-referenced import: its own declaration IS the hop.
         const t = viaImport(name, imp);
-        if (t != null) deps[`${name}>${name}`] = t;
+        if (t != null) { deps[`${name}>${name}`] = t.text; noteBeyond(`${name}>${name}`, t); }
       } else {
         const local = host.decls.get(name);
         if (local) {
+          for (const d of dynamicCalls(local.def, ctx.code)) limited.push(`${name}>${d}`);
           for (const r of collectRefs(local.def, name, host)) {
             let text: string | null = null;
+            let loc: Located | null = null;
             if (r.kind === 'local') {
               const d = host.decls.get(r.name)!;
               text = ctx.code.slice(d.slice.start, d.slice.end);
+              loc = hostLoc(d.def, r.name);
             } else if (r.kind === 'alias') {
               const d = host.decls.get(r.name)!;
               const callee = factoryOf(d.def, host)!;
@@ -404,29 +476,32 @@ export class ModuleGraph {
               // Member slice when it can be found; else the whole factory (safe over-flag).
               const file = this.resolveSpecifier(factory.source, ctx.path);
               const viaMember = r.member && typeof file === 'string' && file !== 'bare'
-                ? this.exportText(file, factory.imported, r.member) : null;
+                ? this.exportDecl(file, factory.imported, r.member) : null;
               const ft = viaMember ?? viaImport(callee, factory);
               // The declaration itself always counts; a bare-package factory (ref,
               // computed, useRouter) contributes nothing more — out of scope by design.
-              text = ctx.code.slice(d.slice.start, d.slice.end) + (ft == null ? '' : '\n' + ft);
+              text = ctx.code.slice(d.slice.start, d.slice.end) + (ft == null ? '' : '\n' + ft.text);
+              loc = ft;
             } else if (r.kind === 'import') {
-              text = viaImport(r.key, host.imports.get(r.name)!);
+              loc = viaImport(r.key, host.imports.get(r.name)!);
             } else if (r.kind === 'ns') {
-              text = viaImport(r.key, host.imports.get(r.name)!, r.member);
+              loc = viaImport(r.key, host.imports.get(r.name)!, r.member);
             } else if (r.kind === 'service') {
               const svcImport = host.imports.get(r.name);
-              if (svcImport) text = viaImport(r.key, svcImport, r.member);
+              if (svcImport) loc = viaImport(r.key, svcImport, r.member);
               else {
                 const d = host.decls.get(r.name);
                 const m = d?.def?.body?.body?.find((x: Node) => x.key?.name === r.member);
-                text = m ? ctx.code.slice(m.start, m.end) : null;
+                loc = m ? hostLoc(m, r.member!) : null;
               }
             }
-            if (text != null) deps[`${name}>${r.key}`] = text;
+            text ??= loc?.text ?? null;
+            if (text != null) { deps[`${name}>${r.key}`] = text; noteBeyond(`${name}>${r.key}`, loc); }
           }
         }
       }
       out.byName[name] = deps;
+      out.limited[name] = [...new Set(limited)].sort();
     }
     out.unresolved = [...new Set(out.unresolved)].sort();
     return out;
@@ -440,6 +515,11 @@ export class ModuleGraph {
  * in source order wins; null when absent.
  */
 function findMember(root: Node, member: string, code: string): string | null {
+  const n = findMemberNode(root, member);
+  return n ? code.slice(n.start, n.end) : null;
+}
+
+function findMemberNode(root: Node, member: string): Node | null {
   let hit: Node | null = null;
   walk(root, (n) => {
     if (hit) return false;
@@ -454,7 +534,31 @@ function findMember(root: Node, member: string, code: string): string | null {
       return false;
     }
   });
-  return hit ? code.slice((hit as Node).start, (hit as Node).end) : null;
+  return hit;
+}
+
+/**
+ * Calls whose target cannot be known statically: a computed member call with a
+ * non-literal key (`handlers[mode]()`, `this[name]()`) or calling a parameter of a
+ * function inside `root` (a callback). Labelled `(dynamic) <callee source>`.
+ */
+function dynamicCalls(root: Node, code: string): string[] {
+  const params = new Set<string>();
+  walk(root, (n) => {
+    if (/Function|ClassMethod|ObjectMethod/.test(n.type)) for (const p of n.params ?? []) patternNames(p, []).forEach((x) => params.add(x));
+  });
+  const out: string[] = [];
+  walk(root, (n) => {
+    if (n.type !== 'CallExpression' && n.type !== 'OptionalCallExpression') return;
+    const c = n.callee;
+    const literalKey = (k: Node) => k?.type === 'StringLiteral' || k?.type === 'NumericLiteral';
+    if ((c?.type === 'MemberExpression' || c?.type === 'OptionalMemberExpression') && c.computed && !literalKey(c.property)) {
+      out.push(`(dynamic) ${code.slice(c.start, c.end).replace(/\s+/g, ' ').slice(0, 60)}`);
+    } else if (c?.type === 'Identifier' && params.has(c.name)) {
+      out.push(`(dynamic) ${c.name}`);
+    }
+  });
+  return out;
 }
 
 /** Strip // and block comments plus trailing commas from JSONC (string-aware). */

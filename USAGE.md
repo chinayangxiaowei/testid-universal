@@ -202,7 +202,10 @@ a required gate skipped — an id change is *necessary but not sufficient*.
 7. **`mark-green`** once the selective suite is green — the new re-test anchor.
 8. **CI / nightly:** a **full** run (every spec, all viewports). Code changes deeper than one
    hop past a handler (layer 3+, packages, dynamic dispatch) are invisible to the registry
-   *by design*, so the full run is the backstop.
+   *by design*, so the full run is the backstop. `tag` names those dependencies
+   (BEYOND tracking depth) and `affected` appends the "⚠ Beyond tracking depth" fallback
+   list — when your change touched such code, re-run those tests even if the main table
+   is empty.
 
 **The trigger matrix — what each change TYPE must run** (✓ = mandatory):
 
@@ -341,7 +344,8 @@ instance alias, Angular injected service methods). Check, in order: (1) `tag` pr
 `dep tracking: OFF` (you passed `--no-deps`) or an UNRESOLVED import — that import's
 changes cannot trigger; fix the alias in tsconfig `paths`; (2) the changed code is a
 third hop (what the service itself calls), a bare package, or dynamic dispatch — not
-tracked by design; (3) the dependent file was not in the `tag` run (cross-file changes are
+tracked by design (layer 3 and dynamic dispatch are listed by `tag` as BEYOND tracking
+depth and in `affected`'s fallback section); (3) the dependent file was not in the `tag` run (cross-file changes are
 seen only when the page that uses them is re-parsed — tag the whole tree); (4) options API
 / plain `<script>` (Vue) resolve nothing. That is why the periodic full run exists.
 

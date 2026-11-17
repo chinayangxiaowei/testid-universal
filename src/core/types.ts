@@ -107,6 +107,11 @@ export interface ElementNode {
    * resolved by the pipeline. Undefined = dep tracking off / unsupported (no baseline).
    */
   dep_sources?: Record<string, string>;
+  /**
+   * Dependencies beyond tracking depth (layer 3 / dynamic dispatch), as labels
+   * ("submit>createOrder>validate"). A report, not hashed: changes there are invisible.
+   */
+  dep_limits?: string[];
 }
 
 /** Coarse element classification, e.g. {short:"input", long:"native_input_email"}. */
@@ -132,6 +137,8 @@ export interface EntryDraft {
   symbol_defs: Record<string, string>;
   /** Hashes of layer-2 definitions ("<symbol>><ref>"); undefined when tracking was off. */
   dep_defs?: Record<string, string>;
+  /** Beyond-depth dependency labels (report only; never compared by diff). */
+  dep_limited?: string[];
   signals: NormalizedSignals;
   loc?: SourceLoc;
 }

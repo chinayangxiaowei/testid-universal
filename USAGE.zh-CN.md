@@ -182,7 +182,9 @@ expect(r.violations.filter((v) => ['serious','critical'].includes(v.impact!))).t
    (`--min` / `coverage.thresholds`);延后的簇要显式记录,绝不静默丢弃。
 7. **`mark-green`**:选择性套件转绿后执行——新的重测锚点。
 8. **CI / 夜间**:跑**全量**(所有 spec、所有视口)。handler 之后超过一层的代码改动(第三层及以上、
-   裸包、动态分发)**按设计**对注册表不可见,全量跑是兜底。
+   裸包、动态分发)**按设计**对注册表不可见,全量跑是兜底。`tag` 会点名这些依赖(BEYOND
+   tracking depth),`affected` 末尾附「⚠ Beyond tracking depth」兜底列表——改动触及这类代码时,
+   即使主表为空也要重跑这些测试。
 
 **触发矩阵——每种改动"类型"必须跑什么**(✓ = 强制):
 
@@ -311,7 +313,7 @@ rebase 后重跑 `tag`——sticky 保证 id 本身不变,只是版本号重排�
 别名访问的 hook 与 store 成员、Angular 注入服务的方法)。依次排查:(1) `tag` 是否打印了
 `dep tracking: OFF`(传了 `--no-deps`)或 UNRESOLVED 的 import——这类 import 的变更无法触发,
 到 tsconfig `paths` 里补上别名;(2) 改的是第三层(service 自己再调用的)、裸包或动态分发——
-设计上不追踪;(3) 依赖方文件不在本次 `tag` 范围内(跨文件变更只有在使用它的页面被重新解析时
+设计上不追踪(第三层与动态分发会被 `tag` 列为 BEYOND tracking depth,并出现在 `affected` 的兜底小节);(3) 依赖方文件不在本次 `tag` 范围内(跨文件变更只有在使用它的页面被重新解析时
 才能看到——对整个源码树打标);(4) options API / 普通 `<script>`(Vue)解析不到任何定义。
 这正是周期性全量存在的原因。
 

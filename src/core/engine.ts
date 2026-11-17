@@ -109,6 +109,7 @@ export function generate(nodes: ElementNode[], config: CoreConfig, prior?: Prior
       fingerprint: p.fingerprint, signals: sig, loc: p.node.loc,
       symbol_defs: hashSymbolSources(p.node.symbol_sources ?? {}),
       ...(p.node.dep_sources ? { dep_defs: hashSymbolSources(p.node.dep_sources) } : {}),
+      ...(p.node.dep_limits?.length ? { dep_limited: [...p.node.dep_limits] } : {}),
     };
 
     if (p.node.existingId) {

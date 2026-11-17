@@ -10,10 +10,13 @@ import { CoreConfig, Warning, TagStats } from '../core/types';
 import { normalizeSignals, referencedSymbolNames } from '../core';
 import { FrameworkAdapter } from '../adapters/contract';
 import { TestIdTransport } from './transport';
-import { ModuleGraph } from './deps';
+import { ModuleGraph, DepResolution } from './deps';
 
-/** Layer-2 dep tracking report: whether it ran, and what could not be resolved. */
-export interface DepStats { enabled: boolean; tracked: number; unresolved: string[] }
+/**
+ * Layer-2 dep tracking report: whether it ran, what could not be resolved, and what
+ * lies beyond tracking depth (layer 3 / dynamic dispatch — changes there are invisible).
+ */
+export interface DepStats { enabled: boolean; tracked: number; unresolved: string[]; limited: string[] }
 
 export interface TaggedFile { file: string; before: string; after: string; }
 
@@ -26,7 +29,7 @@ export async function runPipeline(
 ): Promise<{ tagged: TaggedFile[]; version: number; overrides: string[]; warnings: Warning[]; stats: TagStats; outOfScope: number; deps: DepStats }> {
   const depsOn = opts?.deps !== false && typeof adapter.scriptContext === 'function';
   const graph = depsOn ? new ModuleGraph() : null;
-  const depStats: DepStats = { enabled: depsOn, tracked: 0, unresolved: [] };
+  const depStats: DepStats = { enabled: depsOn, tracked: 0, unresolved: [], limited: [] };
   // 1. Parse every file into the shared IR (the only framework-aware step).
   const parsed = files.flatMap((f) => {
     const fileNodes = adapter.parse(f.source, f.file, f.component);
@@ -52,13 +55,21 @@ export async function runPipeline(
       const perNode = fileNodes.map((n) => referencedSymbolNames(normalizeSignals(n.signals)));
       const all = [...new Set(perNode.flat())].sort();
       const ctx = all.length ? adapter.scriptContext!(f.source, f.file) : null;
-      const res = ctx ? graph.resolve(all, ctx) : { byName: {}, unresolved: [] };
+      const res: DepResolution = ctx ? graph.resolve(all, ctx) : { byName: {}, unresolved: [], limited: {} };
       depStats.unresolved.push(...res.unresolved);
       fileNodes.forEach((n, i) => {
         const deps: Record<string, string> = {};
-        for (const name of perNode[i]) Object.assign(deps, res.byName[name] ?? {});
+        const limits = new Set<string>();
+        for (const name of perNode[i]) {
+          Object.assign(deps, res.byName[name] ?? {});
+          for (const l of res.limited[name] ?? []) limits.add(l);
+        }
         depStats.tracked += Object.keys(deps).length;
         n.dep_sources = deps;
+        if (limits.size) {
+          n.dep_limits = [...limits].sort();
+          depStats.limited.push(...n.dep_limits);
+        }
       });
     }
     return fileNodes;
@@ -86,7 +97,7 @@ export async function runPipeline(
   }));
 
   return { tagged, version: resp.version, overrides: resp.overrides, warnings: resp.warnings, stats: resp.stats, outOfScope: resp.outOfScope ?? 0,
-    deps: { ...depStats, unresolved: [...new Set(depStats.unresolved)].sort() } };
+    deps: { ...depStats, unresolved: [...new Set(depStats.unresolved)].sort(), limited: [...new Set(depStats.limited)].sort() } };
 }
 
 /** One CLI/CI line per warning, led by its code so logs can be filtered by category. */
