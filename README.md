@@ -137,7 +137,7 @@ const result = await runPipeline(adapter, transport, files);
 for (const t of result.tagged) if (t.after !== t.before) writeFileSync(t.file, t.after);
 
 console.log(`registry version ${result.version}`);
-for (const w of result.warnings) console.warn(w.message); // unstable-identity / loop-multiplicity
+for (const w of result.warnings) console.warn(`[${w.code}] ${w.message}`); // w.code: unstable-identity / loop-multiplicity / ...
 
 // later, after edits + another runPipeline:
 const d = await transport.diff(1, 2);
@@ -176,6 +176,7 @@ npm run cli -- gen-locators --target playwright --out tests/locators --registry 
 npm run cli -- gen-constants --out e2e/testids.generated.ts --registry ./reg
 npm run cli -- affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
 npm run serve            # OPTIONAL node:http backend on :7337; add --server <url> to any command
+                         # (JsonFileStorage = one host; set DATABASE_URL for PostgresStorage)
 ```
 
 `affected` prints the `write-new` / `retire` / `re-test` report and (with `--out-list`)

@@ -9,7 +9,15 @@ import { RegistrySnapshot } from './storage';
 import { NormalizedSignals } from '../core/types';
 
 export interface SignalChange { field: string; old: string | null; new: string | null }
-export interface ModifyEntry { id: string; identity: string; component: string; changes: SignalChange[] }
+export interface ModifyEntry {
+  id: string; identity: string; component: string; changes: SignalChange[];
+  /**
+   * The id stayed (sticky) but the element it sits on now has a different identity:
+   * the id no longer anchors the same thing. Tests using it must be re-checked for
+   * intent, not just re-run; consider `--regenerate` or an explicit data-tid.
+   */
+  anchor_drift?: true;
+}
 export interface SimpleEntry { id: string; identity: string; component: string }
 
 export interface DiffResult {
@@ -101,10 +109,15 @@ export function diff(from: RegistrySnapshot, to: RegistrySnapshot): DiffResult {
         ...(prev.symbol_defs === undefined ? [] : diffSymbolDefs(prev.symbol_defs, entry.symbol_defs)),
         ...diffDepDefs(prev.dep_defs, entry.dep_defs),
       ];
-      if (prev.fingerprint === entry.fingerprint && symbolChanges.length === 0) unchanged++;
+      const drift = prev.identity !== entry.identity;
+      if (prev.fingerprint === entry.fingerprint && symbolChanges.length === 0 && !drift) unchanged++;
       else modified.push({
         id, identity: entry.identity, component: entry.component,
-        changes: [...diffSignals(prev.signals, entry.signals), ...symbolChanges],
+        changes: [
+          ...(drift ? [{ field: 'identity', old: prev.identity, new: entry.identity }] : []),
+          ...diffSignals(prev.signals, entry.signals), ...symbolChanges,
+        ],
+        ...(drift ? { anchor_drift: true as const } : {}),
       });
     } else if ((entry.generation_history?.length ?? 0) > 1) {
       regenerated.push({ id, identity: entry.identity, component: entry.component });
@@ -136,6 +149,16 @@ export function diffToMarkdown(d: DiffResult): string {
   if (d.modified.length) {
     L.push('', '## Modified', '| ID | Changed fields |', '| --- | --- |');
     for (const m of d.modified) L.push(`| \`${m.id}\` | ${m.changes.map((c) => c.field).join(', ')} |`);
+  }
+  const drifted = d.modified.filter((m) => m.anchor_drift);
+  if (drifted.length) {
+    L.push('', '## ⚠ Anchor drift (sticky id now on an element with a different identity)',
+      '| ID | Was | Now |', '| --- | --- | --- |');
+    for (const m of drifted) {
+      const c = m.changes.find((x) => x.field === 'identity')!;
+      L.push(`| \`${m.id}\` | \`${c.old}\` | \`${c.new}\` |`);
+    }
+    L.push('', 'Re-check what these tests assert; consider `tag --regenerate` or an explicit data-tid.');
   }
   if (d.added.length) {
     L.push('', '## Added', '| ID |', '| --- |');

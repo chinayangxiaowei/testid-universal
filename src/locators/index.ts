@@ -165,8 +165,18 @@ export function constNameForId(id: string): string {
  * hardcoding id strings, so a removed/renamed id makes the constant vanish and
  * the test fails to compile (fail-closed).
  */
-export function generateConstants(snapshot: RegistrySnapshot): string {
-  const lines = ['// Auto-generated testid constants. Do not edit by hand.', '', 'export const testIds = {'];
+export type ConstantsLang = 'ts' | 'js';
+
+/** Pick the constants flavor from the target file: .js/.mjs/.cjs/.jsx -> plain JS, else TS. */
+export function constantsLangForPath(file: string | undefined): ConstantsLang {
+  return file && /\.(m|c)?jsx?$/i.test(file) ? 'js' : 'ts';
+}
+
+export function generateConstants(snapshot: RegistrySnapshot, opts: { lang?: ConstantsLang } = {}): string {
+  const js = opts.lang === 'js';
+  // Plain JS gets the JSDoc const assertion (checkJs keeps literal types) instead of `as const`.
+  const lines = ['// Auto-generated testid constants. Do not edit by hand.', '',
+    js ? 'export const testIds = /** @type {const} */ ({' : 'export const testIds = {'];
   const seen = new Map<string, string>();
   for (const id of sortedIds(snapshot)) {
     const name = camelName(id);
@@ -180,6 +190,6 @@ export function generateConstants(snapshot: RegistrySnapshot): string {
     seen.set(name, id);
     lines.push(`  ${name}: '${id}',`);
   }
-  lines.push('} as const;', '');
+  lines.push(js ? '});' : '} as const;', '');
   return lines.join('\n');
 }

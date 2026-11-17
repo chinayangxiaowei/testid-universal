@@ -95,3 +95,37 @@ describe('static_attributes change attribution', () => {
     expect(changes).toEqual([{ field: 'attr:[src]', old: 'p.image', new: 'p.image | defaultImage' }]);
   });
 });
+
+// Downstream: a sticky id is frozen, so when the element it sits on now has a different
+// identity (e.g. onClick={submit} -> onClick={other}) the id no longer anchors the same
+// thing. Report it explicitly instead of as just another field change.
+import { affectedTests, affectedTestCases, affectedTestsToMarkdown } from '../../src/testmap';
+import { diffToMarkdown } from '../../src/registry/diff';
+
+describe('diff — sticky anchor drift', () => {
+  const v1 = snapshot(1, { 'p__button--submit': e('p::button::submit', { event_handlers: { click: 'submit' } }, 'F1') });
+  const v2 = snapshot(2, { 'p__button--submit': e('p::button::other', { event_handlers: { click: 'other' } }, 'F2') });
+
+  it('flags anchor_drift and reports the identity change', () => {
+    const d = diff(v1, v2);
+    expect(d.summary.modified).toBe(1);
+    expect(d.modified[0].anchor_drift).toBe(true);
+    expect(d.modified[0].changes).toContainEqual({ field: 'identity', old: 'p::button::submit', new: 'p::button::other' });
+    expect(diffToMarkdown(d)).toMatch(/anchor drift/i);
+  });
+
+  it('a plain modification is not drift', () => {
+    const v3 = snapshot(3, { 'p__button--submit': e('p::button::submit', { event_handlers: { click: 'submit' }, text: 'Go' }, 'F3') });
+    const d = diff(v1, v3);
+    expect(d.modified[0].anchor_drift).toBeUndefined();
+    expect(d.modified[0].changes.some((c) => c.field === 'identity')).toBe(false);
+  });
+
+  it('affected routing carries the drift flag into the re-test list', () => {
+    const d = diff(v1, v2);
+    const a = affectedTests(d, { 'p__button--submit': ['p.spec.ts'] });
+    expect(a[0]).toMatchObject({ action: 're-test', anchor_drift: true });
+    expect(affectedTestsToMarkdown(a)).toMatch(/anchor drift/i);
+    expect(affectedTestCases(d, {})[0].anchor_drift).toBe(true);
+  });
+});

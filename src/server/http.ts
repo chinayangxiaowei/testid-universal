@@ -13,7 +13,8 @@
  */
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { TestIdService } from './service';
-import { RegistryStorage } from '../registry/storage';
+import { RegistryStorage, JsonFileStorage } from '../registry/storage';
+import { PostgresStorage, PgQueryable } from '../registry/postgres';
 
 function readBody(req: IncomingMessage): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -62,10 +63,43 @@ export function createApp(storage: RegistryStorage) {
   });
 }
 
+/**
+ * Pick the backend storage from the environment. DATABASE_URL -> PostgresStorage
+ * (the multi-host answer; needs the optional `pg` package). Otherwise
+ * JsonFileStorage on REGISTRY_DIR — safe for parallel processes on ONE host only,
+ * so the caller is told so instead of discovering it as lost updates.
+ */
+export function storageFromEnv(
+  env: Record<string, string | undefined>,
+  deps: { makePool?: (url: string) => PgQueryable } = {},
+): { storage: RegistryStorage; warnings: string[] } {
+  if (env.DATABASE_URL) {
+    const makePool = deps.makePool ?? ((url: string) => {
+      let pg: any;
+      try { pg = require('pg'); } catch {
+        throw new Error('DATABASE_URL is set but the optional "pg" package is not installed: npm install pg');
+      }
+      return new pg.Pool({ connectionString: url });
+    });
+    return { storage: new PostgresStorage(makePool(env.DATABASE_URL)), warnings: [] };
+  }
+  const dir = env.REGISTRY_DIR ?? './test-artifacts/testids';
+  return {
+    storage: new JsonFileStorage(dir),
+    warnings: [
+      `storage: JsonFileStorage (${dir}) -- safe for concurrent writers on a single host / local filesystem only.`,
+      'For multiple hosts or a network filesystem set DATABASE_URL to use PostgresStorage.',
+    ],
+  };
+}
+
 // Allow `ts-node src/server/http.ts` to boot a live server.
 if (require.main === module) {
-  const { JsonFileStorage } = require('../registry/storage');
-  const port = Number(process.env.PORT ?? 7337);
-  createApp(new JsonFileStorage(process.env.REGISTRY_DIR ?? './test-artifacts/testids'))
-    .listen(port, () => console.log(`testid-universal backend on http://localhost:${port}`));
+  (async () => {
+    const { storage, warnings } = storageFromEnv(process.env);
+    for (const w of warnings) console.warn(`WARNING ${w}`);
+    if (storage instanceof PostgresStorage) await storage.init();
+    const port = Number(process.env.PORT ?? 7337);
+    createApp(storage).listen(port, () => console.log(`testid-universal backend on http://localhost:${port}`));
+  })().catch((err) => { console.error((err as Error).message); process.exit(1); });
 }

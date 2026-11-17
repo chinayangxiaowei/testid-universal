@@ -10,7 +10,7 @@
  *              [--registry DIR] [--server URL] [--regenerate] [--dry] [--check] [--no-deps]
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
  *   testid gen-locators [--target robot|playwright|cypress|webdriverio|selenium-python|testcafe] [--out DIR] [--registry DIR] [--server URL]
- *   testid gen-constants [--out FILE] [--check] [--registry DIR] [--server URL]
+ *   testid gen-constants [--out FILE] [--lang ts|js] [--check] [--registry DIR] [--server URL]
  *   testid affected <fromVersion> <toVersion> | --since FILE  [--tests DIR[,DIR]] [--out-list FILE] [--grep-out FILE] [--files-only] [--registry DIR] [--server URL]
  *   testid mark-green [--since FILE] [--registry DIR] [--server URL]   (record latest version as the re-test anchor)
  *
@@ -21,7 +21,7 @@
 import { readFileSync, writeFileSync, statSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 import { createTransport, LocalTransport } from './client/transport';
-import { runPipeline } from './client/pipeline';
+import { runPipeline, formatWarning } from './client/pipeline';
 import { FrameworkAdapter } from './adapters/contract';
 import { HtmlTemplateAdapter } from './adapters/html';
 import { VueAdapter } from './adapters/vue';
@@ -29,7 +29,7 @@ import { AngularAdapter } from './adapters/angular';
 import { ReactAdapter } from './adapters/react';
 import { diffToMarkdown } from './registry/diff';
 import { InMemoryStorage } from './registry/storage';
-import { LocatorTarget, generateConstants } from './locators';
+import { LocatorTarget, generateConstants, constantsLangForPath, ConstantsLang } from './locators';
 import { buildTestMap, buildTestMapForIds, affectedTests, affectedTestsToMarkdown, buildTestCaseMapForIds, affectedTestCases, affectedTestCasesToMarkdown, coverageReport, coverageToMarkdown } from './testmap';
 import { readRuntimeRecord } from './runtime';
 
@@ -105,7 +105,7 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
     const checked = await runPipeline(adapter, checkTransport, files, config, { deps: false });
     if (checked.warnings.length) {
       console.warn(`${checked.warnings.length} identity warning(s):`);
-      for (const w of checked.warnings) console.warn(`  - ${w.message}`);
+      for (const w of checked.warnings) console.warn(`  - ${formatWarning(w)}`);
     }
     const changed = checked.tagged.filter((t) => t.after !== t.before).map((t) => t.file);
     if (changed.length) {
@@ -127,7 +127,7 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
   if (result.overrides.length) console.log(`manual overrides: ${result.overrides.join(', ')}`);
   if (result.warnings.length) {
     console.warn(`\n${result.warnings.length} identity warning(s):`);
-    for (const w of result.warnings) console.warn(`  - ${w.message}`);
+    for (const w of result.warnings) console.warn(`  - ${formatWarning(w)}`);
   }
   const st = result.stats;
   console.log(`tagging coverage: ${st.tagged}/${st.elements} parsed elements tagged` +
@@ -173,7 +173,9 @@ async function cmdGenConstants(flags: Record<string, string | boolean>) {
   const transport = createTransport({ server: flags.server as string, registryDir: (flags.registry as string) ?? 'test-artifacts/testids' });
   const snap = await transport.latest();
   if (!snap) { console.error('no registry yet'); process.exit(2); }
-  const out = generateConstants(snap);
+  const lang = (flags.lang as string | undefined) ?? constantsLangForPath(flags.out as string);
+  if (lang !== 'ts' && lang !== 'js') { console.error(`--lang must be ts or js (got ${lang})`); process.exit(2); }
+  const out = generateConstants(snap, { lang: lang as ConstantsLang });
   if (flags.check) {
     // CI gate: writes nothing; exit 1 when the committed constants module is
     // missing or stale relative to the latest registry version.

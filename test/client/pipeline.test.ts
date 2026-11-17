@@ -60,3 +60,14 @@ function saveOrder() { return 1; }
     expect(d.modified[0].changes.some((c) => c.field === 'symbol:saveOrder')).toBe(true);
   });
 });
+
+// Downstream: CI logs showed `[undefined]` — the CLI printed only the message, so the
+// category was lost. The formatted line must lead with the warning code.
+import { formatWarning } from '../../src/client/pipeline';
+
+describe('formatWarning', () => {
+  it('prefixes the warning code so CI can filter by category', () => {
+    const line = formatWarning({ code: 'loop-multiplicity', element_type: 'button', identity: 'a::b', message: 'shared id' });
+    expect(line).toBe('[loop-multiplicity] shared id');
+  });
+});

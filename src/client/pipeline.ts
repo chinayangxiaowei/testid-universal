@@ -88,3 +88,8 @@ export async function runPipeline(
   return { tagged, version: resp.version, overrides: resp.overrides, warnings: resp.warnings, stats: resp.stats, outOfScope: resp.outOfScope ?? 0,
     deps: { ...depStats, unresolved: [...new Set(depStats.unresolved)].sort() } };
 }
+
+/** One CLI/CI line per warning, led by its code so logs can be filtered by category. */
+export function formatWarning(w: Warning): string {
+  return `[${w.code}] ${w.message}`;
+}

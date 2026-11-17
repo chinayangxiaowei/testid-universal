@@ -215,14 +215,16 @@ expect(r.violations.filter((v) => ['serious','critical'].includes(v.impact!))).t
 | `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]`(默认 `.html`)· `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` · `--no-deps` | adapter 自动选择:`.vue`→Vue;`.jsx`/`.tsx`→React(老式 `.js` JSX 用 `--ext .js --adapter react`);含 Angular 特征(`(event)=`、`*ngIf`……)的 `.html`→Angular;其余→HTML。`--check`:CI 闸门,零写盘,需打标则 exit 1。`--regenerate`:丢弃已写 id,按当前信号重铸。`--no-deps`:关闭一层外的 `dep_defs` 追踪(默认开启;会打印已追踪/UNRESOLVED 数量) |
 | `diff <from> <to>` | — | markdown diff 到 stdout(字段级 + `symbol:` 变更) |
 | `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
-| `gen-constants` | `--out FILE` · `--check`(CI 闸:已提交的常量模块缺失或落后于注册表最新版时 exit 1)(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
+| `gen-constants` | `--out FILE` · `--lang ts\|js`(默认按 `--out` 扩展名:`.js/.mjs/.cjs/.jsx` 产出纯 JS,用 JSDoc `@type {const}` 代替 `as const`)· `--check`(CI 闸:已提交的常量模块缺失或落后于注册表最新版时 exit 1)(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
 | `mark-green` | `--since FILE`(默认 `.testids-green.json`)| 把注册表最新版本记为重测锚点;选择性重测通过后执行。之后 `affected --since FILE` 恒为 上次绿 -> 最新 的 diff |
 | `rollback` |(仅嵌入式)| 把 `latest` 指回上一版本(非破坏性:被回滚的 `v<N>.json` 保留,重新 tag 会覆盖它)。用于一次错误打标后回退 |
 | `activity` |(仅嵌入式)| 打印注册表活动日志(每次 save 与 rollback,从旧到新)|
 | `coverage` | `--tests DIR[,DIR]`(默认 `e2e`)· `--min N` · `--runtime FILE` | 已打标 id 被测试引用的覆盖率(总体 + 交互元素);`--min` 以交互覆盖率为闸门(低于则 exit 1);`--runtime` 合并运行时"行使"工件(引用 vs 行使 + 动态 id) |
 | `affected <from> <to>`(或 `--since FILE`)| `--tests DIR[,DIR]` · `--out-list FILE`(给 runner 的文件清单)· `--grep-out FILE`(供 `-g`/`-t` 的用例标题正则)· `--files-only`(旧的文件级报告)| 默认用例级:指出每个变更 id 所在的具体 `test(...)` 块 `--tests DIR[,DIR]`(默认 `e2e`)· `--out-list FILE` | 扫描 `.ts/.tsx/.js/.jsx/.mjs/.cjs`;生成的常量文件自动排除;`--out-list` 输出换行分隔的 `re-test` 文件清单 |
 
-后端:`npm run serve` 启动 REST 外壳(`PORT`、`REGISTRY_DIR` 环境变量)。
+后端:`npm run serve` 启动 REST 外壳(`PORT`、`REGISTRY_DIR` 环境变量)。未设置
+`DATABASE_URL` 时使用 `JsonFileStorage`,启动时会警告它只适用于单机;多机写入请设置
+`DATABASE_URL`(并 `npm install pg`)以切换到 `PostgresStorage`。
 
 ## 3. 配置参考(`CoreConfig`)
 
@@ -243,6 +245,14 @@ identity key 优先级(core 持有,不可配置):
 html_id → structural → child_shape → text → aria_label → placeholder → tag`。
 
 ## 4. 警告参考
+
+CLI 将每条警告打印为 `[<code>] <message>`;编程接口里字段名是 `Warning.code`(CI 日志或
+`result.warnings` 可据此过滤)。
+
+**锚点漂移(diff/affected 报告,不是 tag 警告)。** sticky id 保持不变、但它所在元素的 identity
+已经变了(如 `onClick={submit}` → `onClick={other}`,或标签换了)时,`diff` 会给该条目标记
+`anchor_drift`、附一条 `identity` 变化,并输出「⚠ Anchor drift」小节;`affected` 将该行标为
+`re-test ⚠ anchor drift`。要复核测试断言的意图,而不只是看它是否通过;可考虑 `tag --regenerate` 或加 `data-tid`。
 
 | 警告码 | 触发条件 | 处置 |
 | --- | --- | --- |

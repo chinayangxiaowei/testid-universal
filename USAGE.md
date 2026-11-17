@@ -236,14 +236,16 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 | `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]` (default `.html`) · `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` · `--no-deps` | adapter auto-picked: `.vue` → Vue; `.jsx`/`.tsx` → React (legacy `.js` JSX: pass `--ext .js --adapter react`); `.html` with Angular markers (`(event)=`, `*ngIf`, …) → Angular; else HTML. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals. `--no-deps`: turn off one-hop `dep_defs` tracking (default on; prints its tracked/UNRESOLVED counts) |
 | `diff <from> <to>` | — | markdown diff to stdout (field-level + `symbol:` changes) |
 | `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe` (default `robot`) · `--out DIR` (default `tests/locators`) · `--attr` | selector convention `[data-testid="<id>"]` |
-| `gen-constants` | `--out FILE` · `--check` (CI gate: exit 1 if the committed module is missing/stale vs the latest registry) (default stdout) | throws on constant-name collision (fail-closed guarantee) |
+| `gen-constants` | `--out FILE` · `--lang ts\|js` (default: from the `--out` extension — `.js/.mjs/.cjs/.jsx` emit plain JS with a JSDoc `@type {const}` instead of `as const`) · `--check` (CI gate: exit 1 if the committed module is missing/stale vs the latest registry) (default stdout) | throws on constant-name collision (fail-closed guarantee) |
 | `mark-green` | `--since FILE` (default `.testids-green.json`) | records the latest registry version as the re-test anchor; run it after the selective suite passes. `affected --since FILE` then always diffs last-green -> latest |
 | `rollback` | (embedded only) | repoints `latest` to the prior version (non-destructive: the rolled-back `v<N>.json` is kept, a re-tag overwrites it). Use after a bad tag run |
 | `activity` | (embedded only) | prints the registry activity log (every save + rollback, oldest first) |
 | `coverage` | `--tests DIR[,DIR]` (default `e2e`) · `--min N` · `--runtime FILE` | coverage of tagged ids by tests (overall + interactive); `--min` gates on the interactive percentage (exit 1 below); `--runtime` merges an exercised-ids artifact (referenced vs exercised + dynamic ids) |
 | `affected <from> <to>` (or `--since FILE`) | `--tests DIR[,DIR]` · `--out-list FILE` (file list for the runner) · `--grep-out FILE` (test-title alternation for `-g`/`-t`) · `--files-only` (legacy file-level report) | case-level by default: names the exact `test(...)` block each changed id sits in `--tests DIR[,DIR]` (default `e2e`) · `--out-list FILE` | scans `.ts/.tsx/.js/.jsx/.mjs/.cjs`; the generated constants file is auto-excluded; `--out-list` = newline-separated `re-test` files |
 
-Backend: `npm run serve` boots the REST shell (`PORT`, `REGISTRY_DIR` env vars).
+Backend: `npm run serve` boots the REST shell (`PORT`, `REGISTRY_DIR` env vars). Without
+`DATABASE_URL` it uses `JsonFileStorage` and warns at startup that this is safe for one host
+only; set `DATABASE_URL` (and `npm install pg`) to use `PostgresStorage` for multi-host writers.
 
 ## 3. Configuration reference (`CoreConfig`)
 
@@ -264,6 +266,15 @@ Identity-key priority (core-owned, not configurable):
 html_id → structural → child_shape → text → aria_label → placeholder → tag`.
 
 ## 4. Warnings reference
+
+The CLI prints each warning as `[<code>] <message>`; programmatically the field is
+`Warning.code` (filter CI logs or `result.warnings` on it).
+
+**Anchor drift (diff/affected, not a tag warning).** When a sticky id stays but the element
+it sits on now has a different identity (e.g. `onClick={submit}` → `onClick={other}`, or the
+tag changed), `diff` marks the entry `anchor_drift` with an `identity` change and a
+"⚠ Anchor drift" section; `affected` labels the row `re-test ⚠ anchor drift`. Re-check what
+the test asserts, not just whether it passes; consider `tag --regenerate` or a `data-tid`.
 
 | Code | Trigger | What to do |
 | --- | --- | --- |

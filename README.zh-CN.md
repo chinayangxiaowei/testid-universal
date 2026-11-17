@@ -125,7 +125,7 @@ const result = await runPipeline(adapter, transport, files);
 for (const t of result.tagged) if (t.after !== t.before) writeFileSync(t.file, t.after);
 
 console.log(`registry version ${result.version}`);
-for (const w of result.warnings) console.warn(w.message); // unstable-identity / loop-multiplicity
+for (const w of result.warnings) console.warn(`[${w.code}] ${w.message}`); // w.code: unstable-identity / loop-multiplicity / ...
 
 // 之后:编辑代码、再次 runPipeline,然后——
 const d = await transport.diff(1, 2);
@@ -164,6 +164,7 @@ npm run cli -- gen-locators --target playwright --out tests/locators --registry 
 npm run cli -- gen-constants --out e2e/testids.generated.ts --registry ./reg
 npm run cli -- affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
 npm run serve            # 可选:在 :7337 启动 node:http 后端;任意命令加 --server <url> 即切远程
+                         # (JsonFileStorage 仅限单机;设 DATABASE_URL 切 PostgresStorage)
 ```
 
 `affected` 打印 `write-new` / `retire` / `re-test` 报告;加 `--out-list` 会产出可直接喂给

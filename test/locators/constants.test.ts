@@ -41,3 +41,33 @@ describe('constNameForId', () => {
     expect(generateConstants(snap)).toContain("tid1pageInputEmail: '1page__input--email',");
   });
 });
+
+// Downstream: a TS-only module (`as const`) dropped into a plain-JS project breaks it.
+// The flavor follows the target file extension; .ts keeps today's output byte-for-byte.
+import { parse as babelParse } from '@babel/parser';
+import { constantsLangForPath } from '../../src/locators';
+
+describe('generateConstants — JS / TS flavor', () => {
+  const snap = snapshot(1, {
+    'login__button--login': entry({ fingerprint: 'F', identity: 'login::button::login' }),
+  });
+
+  it('js flavor carries no TS syntax and parses as plain ES module JS', () => {
+    const out = generateConstants(snap, { lang: 'js' });
+    expect(out).not.toMatch(/as const/);
+    expect(out).toContain("loginButtonLogin: 'login__button--login',");
+    expect(() => babelParse(out, { sourceType: 'module' })).not.toThrow();
+    expect(out).toContain('@type {const}'); // JSDoc const assertion keeps checkJs literal types
+  });
+
+  it('ts flavor (default) is unchanged', () => {
+    expect(generateConstants(snap, { lang: 'ts' })).toBe(generateConstants(snap));
+    expect(generateConstants(snap)).toContain('} as const;');
+  });
+
+  it('flavor is picked from the target extension', () => {
+    for (const f of ['ids.js', 'a/b/ids.mjs', 'ids.cjs', 'ids.jsx']) expect(constantsLangForPath(f)).toBe('js');
+    for (const f of ['ids.ts', 'ids.mts', 'ids.cts', 'ids.tsx']) expect(constantsLangForPath(f)).toBe('ts');
+    expect(constantsLangForPath(undefined)).toBe('ts');
+  });
+});
