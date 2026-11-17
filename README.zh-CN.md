@@ -226,11 +226,15 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
 
 - 完全相同且无信号的兄弟元素按文档序消歧(信息论上不可避免)——警告会建议加显式
   `data-tid`。
-- 源码依赖只追踪**直接引用**(不做调用图);Vue options API / 普通 `<script>` 降级为
-  仅名字。
-- `JsonFileStorage` 是 last-write-wins(无锁、无鉴权)——嵌入式够用,共享服务请换
-  事务性存储。
-- HTML adapter 是正则扫描器(演示级)。
+- 源码依赖追踪直接引用**再加一层**(`dep_defs`,不做调用图);Vue options API / 普通
+  `<script>` 降级为仅名字。
+- 并发写入不会丢数据:所有存储的 `save` 都对基线版本做 compare-and-swap(过期的写入方
+  收到 `RegistryConflictError`;`tag` 会自动 rebase 重试,并发打标落为连续版本)。
+  `JsonFileStorage` 用 `<registry>/.lock` 锁文件串行化写入方,并原子写入(临时文件 + rename)
+  ——**单机 / 本地文件系统**上多进程并行安全(不支持网络文件系统),无鉴权。超过 30 秒的锁视为
+  崩溃写入方遗留,会被回收。多机共享服务请用 `PostgresStorage`(行锁;传入 `pg.Pool` 才有真
+  事务)。
+- HTML adapter 是手写的、识别引号的扫描器,不是规范解析器。
 
 ## 开发
 

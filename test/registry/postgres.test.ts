@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PostgresStorage } from '../../src/registry/postgres';
+import { RegistryConflictError } from '../../src/registry/storage';
 import { snapshot, entry } from '../helpers';
 
 /**
@@ -97,5 +98,32 @@ describe('PostgresStorage', () => {
   it('loadLatest on an empty registry is null', async () => {
     const s = new PostgresStorage(fakePool() as any);
     expect(await s.loadLatest()).toBeNull();
+  });
+
+  // Lost-update protection (downstream report): ON CONFLICT DO UPDATE used to let a
+  // stale writer silently overwrite a version another writer had just saved.
+  it('rejects a stale writer (compare-and-swap on the base version) instead of overwriting', async () => {
+    const s = new PostgresStorage(fakePool() as any);
+    await s.save(snapN(1));
+    await s.save(snapN(2), { expectedLatest: 1 });
+    await expect(s.save(snapshot(2, { other: entry({ fingerprint: 'zz' }) }), { expectedLatest: 1 }))
+      .rejects.toBeInstanceOf(RegistryConflictError);
+    expect(Object.keys((await s.loadVersion(2))!.entries)).toEqual(['a__b--2']);
+  });
+
+  it('without an explicit base, refuses to write a version <= latest', async () => {
+    const s = new PostgresStorage(fakePool() as any);
+    await s.save(snapN(1));
+    await s.save(snapN(2));
+    await expect(s.save(snapN(2))).rejects.toBeInstanceOf(RegistryConflictError);
+  });
+
+  it('a rolled-back version may be rewritten on top of the new latest', async () => {
+    const s = new PostgresStorage(fakePool() as any);
+    await s.save(snapN(1));
+    await s.save(snapN(2));
+    await s.rollback();
+    await s.save(snapshot(2, { good: entry({ fingerprint: 'g' }) }), { expectedLatest: 1 });
+    expect(Object.keys((await s.loadLatest())!.entries)).toEqual(['good']);
   });
 });

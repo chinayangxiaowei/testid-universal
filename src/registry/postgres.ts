@@ -15,8 +15,14 @@
  * `testid_meta(latest_version)` is the single-row pointer; `testid_activity` is
  * the append-only log. Rollback moves the pointer (non-destructive), mirroring
  * JsonFileStorage exactly so callers cannot tell the backends apart.
+ *
+ * Concurrency: save and rollback lock the pointer row (`SELECT … FOR UPDATE`) and
+ * apply the shared compare-and-swap rule (checkSave), so a stale writer gets
+ * RegistryConflictError instead of overwriting a version. This needs a real
+ * transaction: pass a Pool (with `connect()`) — a bare `{ query }` runs the
+ * statements without one and cannot serialize concurrent writers.
  */
-import { RegistrySnapshot, RegistryStorage, ActivityEntry } from './storage';
+import { RegistrySnapshot, RegistryStorage, ActivityEntry, SaveOptions, checkSave } from './storage';
 
 /** The pg surface we use — a Pool or a single Client both satisfy it. */
 export interface PgQueryable {
@@ -57,11 +63,16 @@ export class PostgresStorage implements RegistryStorage {
     return r.rows.length ? asSnapshot(r.rows[0].data) : null;
   }
 
-  async save(snapshot: RegistrySnapshot): Promise<void> {
+  async save(snapshot: RegistrySnapshot, opts?: SaveOptions): Promise<void> {
     const now = new Date().toISOString();
     await this.tx(async (q) => {
+      // Make sure the pointer row exists, then lock it: concurrent writers serialize here.
+      await q('INSERT INTO testid_meta (id, latest_version) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [0]);
+      const cur = await q('SELECT latest_version FROM testid_meta WHERE id = 1 FOR UPDATE', []);
+      checkSave(snapshot.version, cur.rows[0]?.latest_version || null, opts); // 0 = empty registry
+      // DO UPDATE remains for the documented rollback flow (re-tag rewrites a rolled-back version).
       await q('INSERT INTO testid_snapshots (version, data) VALUES ($1, $2) ON CONFLICT (version) DO UPDATE SET data = EXCLUDED.data', [snapshot.version, snapshot as unknown]);
-      await q('INSERT INTO testid_meta (id, latest_version) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET latest_version = GREATEST(testid_meta.latest_version, EXCLUDED.latest_version)', [snapshot.version]);
+      await q('UPDATE testid_meta SET latest_version = $1 WHERE id = 1', [snapshot.version]);
       await q('INSERT INTO testid_activity (action, version, at) VALUES ($1, $2, $3)', ['save', snapshot.version, now]);
     });
   }
@@ -69,7 +80,7 @@ export class PostgresStorage implements RegistryStorage {
   async rollback(): Promise<{ from: number; to: number } | null> {
     const now = new Date().toISOString();
     return this.tx(async (q) => {
-      const cur = await q('SELECT latest_version FROM testid_meta WHERE id = 1', []);
+      const cur = await q('SELECT latest_version FROM testid_meta WHERE id = 1 FOR UPDATE', []);
       const from = cur.rows.length ? cur.rows[0].latest_version : null;
       if (from == null || from <= 1) return null;
       const prior = await q('SELECT max(version) AS max FROM testid_snapshots WHERE version < $1', [from]);

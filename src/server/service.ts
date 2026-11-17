@@ -10,7 +10,7 @@
  * multi-team testid authority.
  */
 import { ElementNode, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning, TagStats } from '../core';
-import { RegistryStorage, RegistrySnapshot, ActivityEntry, reconcile, diff, DiffResult, generateLocatorsSafe, LocatorTarget } from './_reexport';
+import { RegistryStorage, RegistrySnapshot, RegistryConflictError, ActivityEntry, reconcile, diff, DiffResult, generateLocatorsSafe, LocatorTarget } from './_reexport';
 
 export interface TagRequest {
   nodes: ElementNode[];
@@ -37,8 +37,26 @@ export class TestIdService {
     return { ...DEFAULT_CONFIG, ...(partial ?? {}) };
   }
 
-  /** The main entry point: accept IR, assign ids, persist a new registry version, return edits. */
+  /**
+   * The main entry point: accept IR, assign ids, persist a new registry version, return edits.
+   * Concurrency: if another writer (or a rollback) moved the registry after we read it,
+   * the save is rejected and the whole tag is redone on the new latest — concurrent tags
+   * serialize into consecutive versions instead of overwriting each other.
+   */
   async tag(req: TagRequest): Promise<TagResponse> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.tagOnce(req);
+      } catch (e) {
+        if (!(e instanceof RegistryConflictError) || attempt >= TestIdService.MAX_TAG_ATTEMPTS) throw e;
+        await new Promise((r) => setTimeout(r, Math.random() * 20 * attempt)); // de-synchronize retries
+      }
+    }
+  }
+
+  static readonly MAX_TAG_ATTEMPTS = 8;
+
+  private async tagOnce(req: TagRequest): Promise<TagResponse> {
     const config = this.merge(req.config);
     const prevSnap = await this.storage.loadLatest();
     const prior: PriorEntry[] | undefined = prevSnap
@@ -51,7 +69,7 @@ export class TestIdService {
     const { drafts, warnings, stats } = generate(req.nodes, config, prior);
     // Scope = the files this request parsed; reconcile retires only within it.
     const scopeFiles = new Set(req.nodes.map((n) => n.loc?.file).filter((f): f is string => f != null));
-    const { snapshot, overrides, outOfScope } = await reconcile(drafts, this.storage, undefined, { scopeFiles });
+    const { snapshot, overrides, outOfScope } = await reconcile(drafts, this.storage, undefined, { scopeFiles, base: prevSnap });
 
     const edits: Edit[] = drafts
       .filter((d) => d.loc)

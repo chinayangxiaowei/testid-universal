@@ -243,11 +243,16 @@ from props only and instances share one id), plus **HTML** (regex scanner, demo-
 
 - Truly identical signal-less siblings disambiguate by document order (information-
   theoretically unavoidable) — the warning recommends an explicit `data-tid`.
-- Source-dependency tracking follows **direct references only** (no call graph); Vue
-  options API / plain `<script>` resolve name-only.
-- `JsonFileStorage` is last-write-wins (no locking/auth) — fine embedded; for a
-  shared service use `PostgresStorage` (transactional, same interface).
-- The HTML adapter is a regex scanner (demo-grade).
+- Source-dependency tracking follows direct references **plus one hop** (`dep_defs`, no
+  call graph); Vue options API / plain `<script>` resolve name-only.
+- Concurrent writers never lose work: every storage's `save` is a compare-and-swap on the
+  base version (a stale writer gets `RegistryConflictError`; `tag` rebases and retries, so
+  concurrent tags land as consecutive versions). `JsonFileStorage` serializes writers with
+  a `<registry>/.lock` file and writes atomically (temp + rename) — safe for parallel
+  processes on **one host / local filesystem** (not network filesystems), no auth. A lock
+  older than 30s is treated as a crashed writer and reclaimed. For a shared multi-host
+  service use `PostgresStorage` (row lock; pass a `pg.Pool` so it gets real transactions).
+- The HTML adapter is a hand-written, quote-aware scanner — not a spec parser.
 
 ## Development
 

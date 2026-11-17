@@ -6,12 +6,54 @@
  * history). RegistryStorage is the small interface the rest of the system depends
  * on; swapping InMemory ↔ JsonFile ↔ (future) Postgres changes nothing upstream.
  *
- * JsonFileStorage is last-write-wins with no locking (fine embedded, corrupts under
- * concurrent multi-process writes). For a shared service use the transactional
- * PostgresStorage (src/registry/postgres.ts), which satisfies the same interface.
+ * Every backend enforces the same lost-update rule: `save` is a compare-and-swap on
+ * the base version (see SaveOptions) and rejects a stale writer with
+ * RegistryConflictError — never a silent overwrite. TestIdService.tag rebases and
+ * retries on conflict, so concurrent tags serialize into consecutive versions.
+ * JsonFileStorage guards its critical section with a lock file (single host / local
+ * filesystem) and writes atomically (temp + rename); PostgresStorage uses a row lock.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, appendFileSync } from 'node:fs';
+import {
+  existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, appendFileSync,
+  openSync, closeSync, writeSync, renameSync, unlinkSync, statSync,
+} from 'node:fs';
 import { join } from 'node:path';
+
+/**
+ * A save lost the race: the registry moved on (another writer saved, or a rollback
+ * repointed latest) since the snapshot's base was read. Re-read latest, rebuild the
+ * snapshot on top of it, and save again.
+ */
+export class RegistryConflictError extends Error {
+  readonly code = 'REGISTRY_CONFLICT';
+  constructor(readonly attempted: number, readonly latest: number | null, readonly expected?: number | null) {
+    super(
+      expected !== undefined
+        ? `registry conflict: snapshot v${attempted} was built on v${expected ?? 'none'}, but latest is now v${latest ?? 'none'} (concurrent write or rollback) -- re-read and retry`
+        : `registry conflict: cannot write v${attempted}, latest is already v${latest} (concurrent write) -- re-read and retry`,
+    );
+    this.name = 'RegistryConflictError';
+  }
+}
+
+export interface SaveOptions {
+  /**
+   * The latest version this snapshot was built on (null = empty registry). When given,
+   * save succeeds only if latest still equals it. When omitted, save only refuses to
+   * write a version <= the current latest. Either way a stale writer gets
+   * RegistryConflictError instead of overwriting someone else's version.
+   */
+  expectedLatest?: number | null;
+}
+
+/** The shared CAS rule every backend applies inside its critical section. */
+export function checkSave(attempted: number, latest: number | null, opts?: SaveOptions): void {
+  if (opts && opts.expectedLatest !== undefined) {
+    if ((latest ?? null) !== (opts.expectedLatest ?? null)) throw new RegistryConflictError(attempted, latest, opts.expectedLatest);
+  } else if (latest != null && latest >= attempted) {
+    throw new RegistryConflictError(attempted, latest);
+  }
+}
 import { NormalizedSignals } from '../core/types';
 
 export interface RegistryEntry {
@@ -60,7 +102,8 @@ export interface ActivityEntry {
 export interface RegistryStorage {
   loadLatest(): Promise<RegistrySnapshot | null>;
   loadVersion(version: number): Promise<RegistrySnapshot | null>;
-  save(snapshot: RegistrySnapshot): Promise<void>;
+  /** Persist a new version. Rejects with RegistryConflictError on a lost update (see SaveOptions). */
+  save(snapshot: RegistrySnapshot, opts?: SaveOptions): Promise<void>;
   /**
    * Repoint "latest" to the immediately-prior version (non-destructive — the
    * rolled-back version's file/record is kept, so a re-tag overwrites it).
@@ -83,7 +126,8 @@ export class InMemoryStorage implements RegistryStorage {
     return this.versions.get(version) ?? null;
   }
   private log: ActivityEntry[] = [];
-  async save(snapshot: RegistrySnapshot): Promise<void> {
+  async save(snapshot: RegistrySnapshot, opts?: SaveOptions): Promise<void> {
+    checkSave(snapshot.version, this.latestVersion || null, opts);
     this.versions.set(snapshot.version, snapshot);
     if (snapshot.version > this.latestVersion) this.latestVersion = snapshot.version;
     this.log.push({ action: 'save', version: snapshot.version, at: new Date().toISOString() });
@@ -105,8 +149,75 @@ export class InMemoryStorage implements RegistryStorage {
  * File-backed storage: one `v<N>.json` per version plus a `latest.json` pointer.
  * This is the embedded CLI default — the registry lives in the repo as plain JSON.
  */
+export interface JsonFileStorageOptions {
+  /** How long a writer waits for the registry lock before failing (default 10s). */
+  lockTimeoutMs?: number;
+  /** A lock file older than this is a crashed writer's and is reclaimed (default 30s). */
+  staleLockMs?: number;
+}
+
 export class JsonFileStorage implements RegistryStorage {
-  constructor(private dir: string) {}
+  private lockTimeoutMs: number;
+  private staleLockMs: number;
+  constructor(private dir: string, opts: JsonFileStorageOptions = {}) {
+    this.lockTimeoutMs = opts.lockTimeoutMs ?? 10_000;
+    this.staleLockMs = opts.staleLockMs ?? 30_000;
+  }
+
+  private lockFile(): string {
+    return join(this.dir, '.lock');
+  }
+
+  /**
+   * Inter-process mutex for the read-check-write critical section: exclusive create
+   * of `<dir>/.lock` (O_EXCL is atomic on a local filesystem). Contenders back off and
+   * retry until lockTimeoutMs; a lock older than staleLockMs (a crashed writer) is
+   * reclaimed. Held only for the few milliseconds of the write itself.
+   */
+  private withLock<T>(fn: () => T): T {
+    mkdirSync(this.dir, { recursive: true });
+    const lock = this.lockFile();
+    const deadline = Date.now() + this.lockTimeoutMs;
+    let delay = 5;
+    for (;;) {
+      try {
+        const fd = openSync(lock, 'wx');
+        try {
+          writeSync(fd, JSON.stringify({ pid: process.pid, at: Date.now() }));
+        } finally {
+          closeSync(fd);
+        }
+        break;
+      } catch (e: any) {
+        if (e?.code !== 'EEXIST') throw e;
+        try {
+          if (Date.now() - statSync(lock).mtimeMs > this.staleLockMs) {
+            unlinkSync(lock); // crashed holder; whoever wins the next O_EXCL gets it
+            continue;
+          }
+        } catch {
+          continue; // lock vanished between EEXIST and stat: retry immediately
+        }
+        if (Date.now() >= deadline) {
+          throw new Error(`registry lock timeout: ${lock} is held by another writer (remove it if no tag/rollback is running)`);
+        }
+        sleepSync(delay);
+        delay = Math.min(delay * 2, 100);
+      }
+    }
+    try {
+      return fn();
+    } finally {
+      try { unlinkSync(lock); } catch { /* already gone */ }
+    }
+  }
+
+  /** Atomic replace: write a sibling temp file, then rename over the target. */
+  private writeAtomic(file: string, content: string): void {
+    const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+    writeFileSync(tmp, content);
+    renameSync(tmp, file);
+  }
 
   private versionFile(version: number): string {
     return join(this.dir, `v${version}.json`);
@@ -134,12 +245,26 @@ export class JsonFileStorage implements RegistryStorage {
   async loadVersion(version: number): Promise<RegistrySnapshot | null> {
     return this.read(this.versionFile(version));
   }
-  async save(snapshot: RegistrySnapshot): Promise<void> {
-    mkdirSync(this.dir, { recursive: true });
+  async save(snapshot: RegistrySnapshot, opts?: SaveOptions): Promise<void> {
     const json = canonicalStringify(snapshot);
-    writeFileSync(this.versionFile(snapshot.version), json);
-    writeFileSync(this.latestFile(), json);
-    this.appendActivity({ action: 'save', version: snapshot.version, at: new Date().toISOString() });
+    this.withLock(() => {
+      // Re-read latest INSIDE the lock: this is the compare in compare-and-swap.
+      checkSave(snapshot.version, this.latestVersionOnDisk(), opts);
+      this.writeAtomic(this.versionFile(snapshot.version), json);
+      this.writeAtomic(this.latestFile(), json);
+      this.appendActivity({ action: 'save', version: snapshot.version, at: new Date().toISOString() });
+    });
+  }
+
+  private latestVersionOnDisk(): number | null {
+    const pointed = this.read(this.latestFile());
+    if (pointed) return pointed.version;
+    if (!existsSync(this.dir)) return null;
+    const versions = readdirSync(this.dir)
+      .map((f) => /^v(\d+)\.json$/.exec(f))
+      .filter((m): m is RegExpExecArray => m != null)
+      .map((m) => Number(m[1]));
+    return versions.length ? Math.max(...versions) : null;
   }
 
   private activityFile(): string {
@@ -151,17 +276,18 @@ export class JsonFileStorage implements RegistryStorage {
   }
 
   async rollback(): Promise<{ from: number; to: number } | null> {
-    const current = await this.loadLatest();
-    if (!current || current.version <= 1) return null;
-    const from = current.version;
-    // The immediately-prior version on disk (skip gaps from earlier rollbacks).
-    let to = from - 1;
-    while (to >= 1 && !existsSync(this.versionFile(to))) to--;
-    if (to < 1) return null;
-    const prior = this.read(this.versionFile(to))!;
-    writeFileSync(this.latestFile(), canonicalStringify(prior));
-    this.appendActivity({ action: 'rollback', from, to, at: new Date().toISOString() });
-    return { from, to };
+    return this.withLock(() => {
+      const from = this.latestVersionOnDisk();
+      if (from == null || from <= 1) return null;
+      // The immediately-prior version on disk (skip gaps from earlier rollbacks).
+      let to = from - 1;
+      while (to >= 1 && !existsSync(this.versionFile(to))) to--;
+      if (to < 1) return null;
+      const prior = this.read(this.versionFile(to))!;
+      this.writeAtomic(this.latestFile(), canonicalStringify(prior));
+      this.appendActivity({ action: 'rollback', from, to, at: new Date().toISOString() });
+      return { from, to };
+    });
   }
 
   async activity(): Promise<ActivityEntry[]> {
@@ -169,6 +295,11 @@ export class JsonFileStorage implements RegistryStorage {
     if (!existsSync(file)) return [];
     return readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as ActivityEntry);
   }
+}
+
+/** Synchronous sleep (lock backoff) without spinning the CPU. */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 /**

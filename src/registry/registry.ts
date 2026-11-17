@@ -26,6 +26,12 @@ export interface ReconcileOptions {
    * them by recording files).
    */
   scopeFiles?: Set<string>;
+  /**
+   * The snapshot the caller already read and built its drafts on. When given, it is
+   * the reconcile base AND the compare-and-swap expectation for save — one read, so a
+   * concurrent write in between surfaces as RegistryConflictError, never a lost update.
+   */
+  base?: RegistrySnapshot | null;
 }
 
 export async function reconcile(
@@ -34,7 +40,7 @@ export async function reconcile(
   now: string = new Date().toISOString(),
   options: ReconcileOptions = {},
 ): Promise<ReconcileResult> {
-  const prev = await storage.loadLatest();
+  const prev = options.base !== undefined ? options.base : await storage.loadLatest();
   const prevEntries = prev?.entries ?? {};
   const prevRetired = prev?.retired ?? {};
   const version = (prev?.version ?? 0) + 1;
@@ -103,6 +109,6 @@ export async function reconcile(
   }
 
   const snapshot: RegistrySnapshot = { version, generated_at: now, entries, retired };
-  await storage.save(snapshot);
+  await storage.save(snapshot, { expectedLatest: prev?.version ?? null });
   return { snapshot, overrides, outOfScope };
 }
