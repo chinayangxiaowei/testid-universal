@@ -21,10 +21,24 @@
 - **Fail-closed 定位器**——生成 test id 常量(TS 或纯 JS),元素被删时编译失败,而不是等到
   测试运行才发现。
 
+```mermaid
+flowchart TD
+  CHANGE(["✏️ 任意代码变更"]) --> TAG
+  TAG["<b>testid tag</b><br/>① 每个元素一个确定性、sticky 的 data-testid<br/>② 元素引用的 handler 定义哈希<br/>③ handler 直接调用的定义哈希 · 一层<br/>④ 第三层及以上 / 动态调用：点名，不哈希"]
+  TAG --> REG[("版本化注册表<br/>v1 … vN")]
+  REG --> DIFF{"diff 基线 → vN"}
+  DIFF -->|"新增 id"| W["write-new 新写测试"]
+  DIFF -->|"删除 id"| R["retire 退役<br/>常量消失：编译失败"]
+  DIFF -->|"id 未变，依赖的源码变了"| T["re-test 重测"]
+  DIFF -.->|"未追踪的代码可能变了"| F["兜底测试"]
+  TESTS["你的 e2e 测试<br/>Playwright · Cypress · WebdriverIO"] --> MAP["id → 测试用例映射"]
+  W & R & T & F --> OUT
+  classDef key fill:#fff3c4,stroke:#d4a017,stroke-width:2px,color:#1f2328
+  class T,TAG key
+  MAP --> OUT["✅ 精确的待跑用例<br/>checkout.spec.ts › submits an order"]
 ```
-RawSignals(逐元素) → identity + fingerprint → 确定性 id
-        → 版本化注册表 → diff → 重测路由(用例映射 + 源码依赖映射)
-```
+
+它的不同之处:id **没变**,但它背后的代码变了,照样触发重测;看不见的部分会被点名,绝不报成安全。
 
 ## 要解决的问题
 

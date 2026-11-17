@@ -23,10 +23,25 @@ an exact **E2E test selection** — which test cases to rerun, rewrite, or retir
 - **Fail-closed locators** — generated test id constants (TS or plain JS), so a removed
   element breaks compilation instead of a test run.
 
+```mermaid
+flowchart TD
+  CHANGE(["✏️ Any code change"]) --> TAG
+  TAG["<b>testid tag</b><br/>① deterministic, sticky data-testid per element<br/>② hash of the handler it references<br/>③ hash of what that handler calls · one hop<br/>④ layer 3+ / dynamic calls: named, not hashed"]
+  TAG --> REG[("Versioned registry<br/>v1 … vN")]
+  REG --> DIFF{"diff baseline → vN"}
+  DIFF -->|"id added"| W["write-new"]
+  DIFF -->|"id removed"| R["retire<br/>its constant is gone: compile error"]
+  DIFF -->|"same id, its source changed"| T["re-test"]
+  DIFF -.->|"untracked code may have changed"| F["fallback tests"]
+  TESTS["Your e2e tests<br/>Playwright · Cypress · WebdriverIO"] --> MAP["id → test case map"]
+  W & R & T & F --> OUT
+  classDef key fill:#fff3c4,stroke:#d4a017,stroke-width:2px,color:#1f2328
+  class T,TAG key
+  MAP --> OUT["✅ Exact test cases to run<br/>checkout.spec.ts › submits an order"]
 ```
-RawSignals (per element) → identity + fingerprint → deterministic id
-        → versioned registry → diff → re-test routing (test map + source-dependency map)
-```
+
+What sets it apart: an id that did **not** change still triggers a re-test when the code
+behind it changes — and what it cannot see is named, never reported as safe.
 
 ## The problem
 
