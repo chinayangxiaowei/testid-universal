@@ -52,8 +52,10 @@ export function applyEditsByOffset(source: string, edits: Edit[]): string {
  * Each edit's `loc` must span an element's opening tag — `loc.start` at the `<`
  * and `loc.end` at the closing `>` (or the `>` of `/>`). For every edit this
  * rewrites the whole opening tag: it strips the tag's OWN pre-existing
- * data-testid/data-cy and appends the assigned attribute, preserving self-closing
- * form. Re-running on already-tagged source therefore produces identical output.
+ * data-testid/data-cy and inserts the assigned attribute before the tag's closing
+ * `>`/`/>`; every other byte (newlines, indentation, self-close spacing) is kept, so
+ * removing the inserted attribute yields the original source. Re-running on
+ * already-tagged source therefore produces identical output.
  *
  * Spans may NEST (React: `<Chat terminal={<Terminal />} />` — the inner opening tag
  * lives inside an outer attribute value). Edits are therefore arranged into a
@@ -94,10 +96,13 @@ export function applyTestIdEdits(source: string, edits: Edit[]): string {
       body += strip(source.slice(cursor, c.e.loc.start)) + render(c);
       cursor = c.e.loc.end + 1;
     }
-    let tail = source.slice(cursor, e.loc.end + 1);
-    const selfClose = /\/>\s*$/.test(tail);
-    tail = strip(tail.replace(/\/?>\s*$/, '')).replace(/\s+$/, '');
-    return `${body}${tail} ${e.attributeName}="${e.id}"${selfClose ? ' />' : '>'}`;
+    // Minimal invasion: the attribute goes right before the tag's original closing
+    // run (whitespace + `>` or `/>`), which is kept verbatim — newlines/indent and
+    // the self-close form are the author's formatting, not ours to normalize.
+    const tail = source.slice(cursor, e.loc.end + 1);
+    const closing = /\s*\/?>\s*$/.exec(tail)?.[0] ?? '';
+    const head = strip(tail.slice(0, tail.length - closing.length));
+    return `${body}${head} ${e.attributeName}="${e.id}"${closing}`;
   };
 
   let out = '';

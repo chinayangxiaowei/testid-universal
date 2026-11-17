@@ -245,7 +245,8 @@ function updateItem(i, v) { void i; void v; }
     const written = adapter.write(SFC, [{ loc: child.loc!, attributeName: 'data-testid', id: 'l__childitem--x' }]);
     // The original attribute must survive intact and the id must land at the tag end.
     expect(written).toContain('@update="newItem => updateItem(index, newItem)"');
-    expect(written).toContain('data-testid="l__childitem--x" />');
+    // …before the original closing run, whose newline+indent is preserved.
+    expect(written).toContain('@update="newItem => updateItem(index, newItem)" data-testid="l__childitem--x"\n    />');
     // No corruption: the id must never be injected inside the handler expression.
     expect(written).not.toMatch(/updateItem\(index,[^)]*data-testid/);
   });
