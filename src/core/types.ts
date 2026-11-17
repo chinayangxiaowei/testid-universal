@@ -121,6 +121,13 @@ export interface ElementNode {
   dep_limits?: string[];
 }
 
+/**
+ * One write-back instruction: inject `attributeName="id"` into the element at `loc`.
+ * Produced by the service (`TagResponse.edits`), consumed by an adapter's `write()`.
+ * Lives in core so adapters (a low layer) never import from the server layer.
+ */
+export interface Edit { loc: NonNullable<ElementNode['loc']>; attributeName: string; id: string; }
+
 /** Coarse element classification, e.g. {short:"input", long:"native_input_email"}. */
 export interface ElementType {
   short: string;

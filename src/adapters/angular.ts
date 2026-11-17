@@ -11,9 +11,8 @@
  * declarations with @babel/parser; absent companion or parser, it degrades to null.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { ElementNode, RawSignals } from '../core/types';
+import { ElementNode, RawSignals, Edit } from '../core/types';
 import { FrameworkAdapter, applyTestIdEdits, isOwnTestIdAttr, ownAttrRange } from './contract';
-import { Edit } from '../server/service';
 
 type NgNode = any;
 

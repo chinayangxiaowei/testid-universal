@@ -10,9 +10,8 @@
  * @vue/compiler-sfc / @babel/parser to build the SAME ElementNode[] — see the
  * *.sketch.ts files. The normalization map below is the "vocabulary" seam.
  */
-import { ElementNode, RawSignals } from '../core/types';
+import { ElementNode, RawSignals, Edit } from '../core/types';
 import { FrameworkAdapter, applyTestIdEdits } from './contract';
-import { Edit } from '../server/service';
 
 const VOID_TAGS = new Set(['input', 'img', 'br', 'hr', 'meta', 'link']);
 

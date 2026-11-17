@@ -10,9 +10,8 @@
  * @vue/compiler-sfc is an OPTIONAL peer dependency. It is lazily required so that
  * consumers who never touch Vue keep the package's zero-runtime-dependency profile.
  */
-import { ElementNode, RawSignals } from '../core/types';
+import { ElementNode, RawSignals, Edit } from '../core/types';
 import { FrameworkAdapter, applyTestIdEdits, isOwnTestIdAttr, ownAttrRange } from './contract';
-import { Edit } from '../server/service';
 
 // Minimal shapes we read off the @vue/compiler-dom AST (typed loosely on purpose).
 interface VueLoc { start: { offset: number }; end: { offset: number } }

@@ -15,9 +15,8 @@
  * `resolveSymbolDefs` slices named declarations (top-level and component-body)
  * straight from the parsed source; imports stay the L3 opaque boundary.
  */
-import { ElementNode, RawSignals } from '../core/types';
+import { ElementNode, RawSignals, Edit } from '../core/types';
 import { FrameworkAdapter, applyTestIdEdits, isOwnTestIdAttr, ownAttrRange } from './contract';
-import { Edit } from '../server/service';
 
 type BabelNode = any;
 

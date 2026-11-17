@@ -8,9 +8,19 @@
  * Everything downstream (ids, registry, diff, locators, backend) is shared. To
  * support a new framework you implement this interface and nothing else.
  */
-import { ElementNode } from '../core/types';
-import { Edit } from '../server/service';
-import type { ScriptContext } from '../client/deps';
+import { ElementNode, Edit } from '../core/types';
+
+/**
+ * What an adapter's `scriptContext()` hands the shared layer-2 dependency resolver
+ * (`src/client/deps.ts`): the script that holds the handlers, and where it lives.
+ * Defined here — it is this seam's type — so the adapter layer never imports from
+ * the client layer; the client imports it from the adapters instead.
+ */
+export interface ScriptContext {
+  code: string;
+  /** Path used to resolve relative imports (the SFC / JSX file, or Angular's companion .ts). */
+  path: string;
+}
 
 export interface FrameworkAdapter {
   readonly name: string;

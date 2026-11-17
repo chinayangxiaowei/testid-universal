@@ -26,13 +26,10 @@
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import type { ScriptContext } from '../adapters/contract';
 
-/** What an adapter hands over: the script that holds the handlers, and where it lives. */
-export interface ScriptContext {
-  code: string;
-  /** Path used to resolve relative imports (the SFC / JSX file, or Angular's companion .ts). */
-  path: string;
-}
+/** Re-exported so existing `../client/deps` importers keep working; defined at the adapter seam. */
+export type { ScriptContext };
 
 export interface DepResolution {
   /** referenced symbol name -> { "<name>><ref>": raw definition text } */

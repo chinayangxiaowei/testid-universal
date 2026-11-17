@@ -9,15 +9,13 @@
  * Swap the storage for Postgres/Redis and this same service becomes a multi-repo,
  * multi-team testid authority.
  */
-import { ElementNode, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning, TagStats } from '../core';
+import { ElementNode, Edit, CoreConfig, DEFAULT_CONFIG, PriorEntry, generate, Warning, TagStats } from '../core';
 import { RegistryStorage, RegistrySnapshot, RegistryConflictError, ActivityEntry, reconcile, diff, DiffResult, generateLocatorsSafe, LocatorTarget } from './_reexport';
 
 export interface TagRequest {
   nodes: ElementNode[];
   config?: Partial<CoreConfig>;
 }
-
-export interface Edit { loc: NonNullable<ElementNode['loc']>; attributeName: string; id: string; }
 
 export interface TagResponse {
   version: number;
