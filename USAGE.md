@@ -109,8 +109,8 @@ Add a coverage gate so green diffs cannot hide an untested surface: `testid cove
 Wire the five stages (check → constants+tsc → affected → selective run → full-run
 fallback) per `docs/superpowers/specs/2026-06-11-ci-integration-design.md`. Two rules to
 keep honest: selective execution only when the git diff is confined to tagged component
-files; keep a nightly/post-merge full run (transitive code changes are invisible to the
-registry by design).
+files; keep a nightly/post-merge full run (changes deeper than one hop past a handler are
+invisible to the registry by design — see `dep_defs` in the README).
 
 ### 1.7 The coverage-driven loop (validated methodology)
 
@@ -200,8 +200,9 @@ a required gate skipped — an id change is *necessary but not sufficient*.
 6. **Coverage:** `coverage --runtime` (testid) + the unit `--coverage` (code). Ratchet
    both gates (`--min` / `coverage.thresholds`); log deferred clusters, never drop silently.
 7. **`mark-green`** once the selective suite is green — the new re-test anchor.
-8. **CI / nightly:** a **full** run (every spec, all viewports). Transitive code changes
-   are invisible to the registry *by design*, so the full run is the backstop.
+8. **CI / nightly:** a **full** run (every spec, all viewports). Code changes deeper than one
+   hop past a handler (layer 3+, packages, dynamic dispatch) are invisible to the registry
+   *by design*, so the full run is the backstop.
 
 **The trigger matrix — what each change TYPE must run** (✓ = mandatory):
 
@@ -232,7 +233,7 @@ All commands accept `--registry DIR` (default `test-artifacts/testids`) or
 
 | Command | Flags | Notes |
 | --- | --- | --- |
-| `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]` (default `.html`) · `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter auto-picked: `.vue` → Vue; `.jsx`/`.tsx` → React (legacy `.js` JSX: pass `--ext .js --adapter react`); `.html` with Angular markers (`(event)=`, `*ngIf`, …) → Angular; else HTML. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals |
+| `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]` (default `.html`) · `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` · `--no-deps` | adapter auto-picked: `.vue` → Vue; `.jsx`/`.tsx` → React (legacy `.js` JSX: pass `--ext .js --adapter react`); `.html` with Angular markers (`(event)=`, `*ngIf`, …) → Angular; else HTML. `--check`: CI gate, writes nothing, exit 1 if tagging needed. `--regenerate`: drop written ids, re-mint from current signals. `--no-deps`: turn off one-hop `dep_defs` tracking (default on; prints its tracked/UNRESOLVED counts) |
 | `diff <from> <to>` | — | markdown diff to stdout (field-level + `symbol:` changes) |
 | `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe` (default `robot`) · `--out DIR` (default `tests/locators`) · `--attr` | selector convention `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE` · `--check` (CI gate: exit 1 if the committed module is missing/stale vs the latest registry) (default stdout) | throws on constant-name collision (fail-closed guarantee) |
@@ -322,10 +323,23 @@ CI). If a branch did tag: rebase and re-run `tag` — sticky ids guarantee the i
 themselves do not change, only version numbering is redone.
 
 **Symbol tracking didn't flag my change.**
-Covered: Vue `<script setup>` top-level declarations directly referenced by the element
-(handler names, bound roots, `v-model` targets). Not covered (by design): transitive
-calls (service/util bodies), options API / plain `<script>`, imports beyond their import
-statement. That is why the periodic full run exists.
+Covered: the definitions an element references directly (`symbol:` — handler names, bound
+roots, `v-model` targets) plus ONE hop further (`dep:` — same-file helpers, imported
+functions through relative paths / tsconfig `paths` / barrels, hook & store members via an
+instance alias, Angular injected service methods). Check, in order: (1) `tag` printed
+`dep tracking: OFF` (you passed `--no-deps`) or an UNRESOLVED import — that import's
+changes cannot trigger; fix the alias in tsconfig `paths`; (2) the changed code is a
+third hop (what the service itself calls), a bare package, or dynamic dispatch — not
+tracked by design; (3) the dependent file was not in the `tag` run (cross-file changes are
+seen only when the page that uses them is re-parsed — tag the whole tree); (4) options API
+/ plain `<script>` (Vue) resolve nothing. That is why the periodic full run exists.
+
+**A shared hook/store change re-tests many cases.**
+Expected: `dep_defs` slices the accessed *member* (`tasks.claimTask`), but an element bound
+to the store object itself (`v-model="tasks.query"`, whose root is `tasks`) depends on the
+whole store definition, and every element using a changed shared helper is genuinely
+affected. Over-flagging is the safe direction; `tag --no-deps` restores first-hop-only
+tracking (toggling it is noise-free).
 
 **`tag` on `.vue` errors about `@vue/compiler-sfc`.**
 Install the optional peer: `npm i -D @vue/compiler-sfc`.

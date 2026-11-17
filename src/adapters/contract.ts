@@ -10,6 +10,7 @@
  */
 import { ElementNode } from '../core/types';
 import { Edit } from '../server/service';
+import type { ScriptContext } from '../client/deps';
 
 export interface FrameworkAdapter {
   readonly name: string;
@@ -27,6 +28,14 @@ export interface FrameworkAdapter {
    * simply produce no symbol_defs (name-only tracking, the pre-Phase-D behavior).
    */
   resolveSymbolDefs?(names: string[], source: string, file: string): Record<string, string | null>;
+  /**
+   * OPTIONAL layer-2 capability: hand over the JS/TS script that holds this file's
+   * handlers (and the path its relative imports resolve from). The shared resolver
+   * (`src/client/deps.ts`) then follows ONE hop past each referenced symbol — the
+   * helpers / imports / hooks / injected services its definition directly uses.
+   * Return null when the file has no script.
+   */
+  scriptContext?(source: string, file: string): ScriptContext | null;
 }
 
 /**

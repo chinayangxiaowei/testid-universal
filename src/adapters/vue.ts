@@ -182,6 +182,13 @@ export class VueAdapter implements FrameworkAdapter {
     return applyTestIdEdits(source, edits);
   }
 
+  /** Layer-2 host script: the SFC's <script> + <script setup> blocks (imports resolve from the .vue path). */
+  scriptContext(source: string, file: string) {
+    const { descriptor } = loadVueSfc().parse(source, { filename: file });
+    const parts = [descriptor.script?.content, descriptor.scriptSetup?.content].filter((c): c is string => !!c);
+    return parts.length ? { code: parts.join('\n'), path: file } : null;
+  }
+
   /**
    * L2 resolver: map referenced names to their <script setup> top-level definition
    * text. Imported names resolve to their import statement only (opaque boundary);

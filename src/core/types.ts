@@ -102,6 +102,11 @@ export interface ElementNode {
    * normalizes + hashes it — adapters never produce hashes themselves.
    */
   symbol_sources?: Record<string, string | null>;
+  /**
+   * Layer-2 raw definition text keyed "<symbol>><ref>" (one hop past symbol_sources),
+   * resolved by the pipeline. Undefined = dep tracking off / unsupported (no baseline).
+   */
+  dep_sources?: Record<string, string>;
 }
 
 /** Coarse element classification, e.g. {short:"input", long:"native_input_email"}. */
@@ -125,6 +130,8 @@ export interface EntryDraft {
   disambiguator: string;
   /** Hashes of referenced symbol definitions (the L2 source-dependency layer). */
   symbol_defs: Record<string, string>;
+  /** Hashes of layer-2 definitions ("<symbol>><ref>"); undefined when tracking was off. */
+  dep_defs?: Record<string, string>;
   signals: NormalizedSignals;
   loc?: SourceLoc;
 }

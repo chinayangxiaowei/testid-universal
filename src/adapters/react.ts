@@ -212,6 +212,11 @@ export class ReactAdapter implements FrameworkAdapter {
     return applyTestIdEdits(source, edits);
   }
 
+  /** Layer-2 host script: the JSX file itself. */
+  scriptContext(source: string, file: string) {
+    return { code: source, path: file };
+  }
+
   /** L2 resolver over the JSX file itself (handlers live next to the markup). */
   resolveSymbolDefs(names: string[], source: string, _file: string): Record<string, string | null> {
     const result: Record<string, string | null> = {};

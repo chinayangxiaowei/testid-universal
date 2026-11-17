@@ -80,9 +80,20 @@ adapter 把这些符号解析为**定义的源码文本**(Vue:经 `@vue/compiler
 当某个定义体发生变化——哪怕 id 冻结、标记一字未动——diff 也会报告 `modified` 并标明
 `symbol:<name>`,关联用例被路由为 `re-test`。
 
-**诚实边界:** 只跟踪*直接引用*的定义。import 的符号只解析到 import 语句本身;
-符号→符号的调用(handler 调 service)**不**追踪。无此能力的框架/adapter 降级为
-仅名字跟踪。symbol 跟踪之前创建的注册表升级时零噪音(首次运行只记录基线)。
+**再追一层(`dep_defs`,默认开启;`tag --no-deps` 关闭)。** 被引用 handler *直接使用*的
+定义也会被哈希:同文件辅助函数、import 的函数(相对路径、tsconfig/jsconfig `paths` 别名、
+re-export barrel 一直跟到真实声明)、通过实例别名访问的 hook / store
+(`const tasks = useTaskStore(); tasks.claimTask()` → 只切 `claimTask` 这个成员),以及
+Angular 注入服务的方法(`this.svc.create()`)。这些定义变化时 diff 报 `modified`,字段为
+`dep:<handler>><ref>`(如 `dep:submit>createOrder`),关联用例路由为 `re-test`。只切被引用的
+声明/成员,改同模块的其他导出不会误报。
+
+**诚实边界:** 追踪止于 handler 之后一层——`createOrder` 自己再调用的(第三层)、裸包
+(node_modules)、动态分发都**不**追踪。看起来是本地模块却解析不了的 import,`tag` 会明确
+打印 UNRESOLVED(绝不静默当作没变)。跨文件变更只有在依赖方文件也在本次 `tag` 范围内时才能
+被看到(对整个源码树打标,不要只对改动文件打标)。无此能力的框架/adapter 降级为仅名字跟踪。
+symbol / dep 跟踪之前创建的注册表升级时零噪音(首次运行只记录基线;dep 的 key 只在两侧都存在
+时才比较)。
 
 ## 快速上手
 

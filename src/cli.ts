@@ -7,7 +7,7 @@
  * same commands run against a remote backend instead. Nothing else changes.
  *
  *   testid tag <paths...> [--ext .html|.vue|.jsx,.tsx] [--adapter html|vue|angular|react] [--attr data-testid]
- *              [--registry DIR] [--server URL] [--regenerate] [--dry] [--check]
+ *              [--registry DIR] [--server URL] [--regenerate] [--dry] [--check] [--no-deps]
  *   testid diff <fromVersion> <toVersion> [--registry DIR] [--server URL]
  *   testid gen-locators [--target robot|playwright|cypress|webdriverio|selenium-python|testcafe] [--out DIR] [--registry DIR] [--server URL]
  *   testid gen-constants [--out FILE] [--check] [--registry DIR] [--server URL]
@@ -101,7 +101,8 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
     // files nor a registry version. Sticky ids make this exact: an already-tagged
     // file re-serializes byte-identically, so any difference = untagged elements.
     const checkTransport = new LocalTransport(new InMemoryStorage());
-    const checked = await runPipeline(adapter, checkTransport, files, config);
+    // Dep tracking only feeds the registry; the check compares written source only.
+    const checked = await runPipeline(adapter, checkTransport, files, config, { deps: false });
     if (checked.warnings.length) {
       console.warn(`${checked.warnings.length} identity warning(s):`);
       for (const w of checked.warnings) console.warn(`  - ${w.message}`);
@@ -116,7 +117,7 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
     return;
   }
 
-  const result = await runPipeline(adapter, transport, files, config, { regenerate: !!flags.regenerate });
+  const result = await runPipeline(adapter, transport, files, config, { regenerate: !!flags.regenerate, deps: !flags['no-deps'] });
 
   for (const t of result.tagged) {
     if (flags.dry) { console.log(`--- ${t.file} (dry) ---\n${t.after}\n`); }
@@ -131,6 +132,17 @@ async function cmdTag(positional: string[], flags: Record<string, string | boole
   const st = result.stats;
   console.log(`tagging coverage: ${st.tagged}/${st.elements} parsed elements tagged` +
     ` (${st.skipped_no_signal} no-signal, ${st.skipped_policy} policy-skipped)`);
+  // Layer-2 dep tracking report — never silent: off, and unresolved imports, are stated.
+  if (!result.deps.enabled) {
+    console.log(flags['no-deps'] ? 'dep tracking: OFF (--no-deps) -- only directly referenced definitions are tracked'
+      : `dep tracking: not supported by the ${adapter.name} adapter`);
+  } else {
+    console.log(`dep tracking: ${result.deps.tracked} one-hop definition(s) tracked`);
+    if (result.deps.unresolved.length) {
+      console.warn(`dep tracking: ${result.deps.unresolved.length} local import(s) UNRESOLVED -- changes there will NOT trigger re-tests:`);
+      for (const u of result.deps.unresolved) console.warn(`  - ${u}`);
+    }
+  }
   if (result.outOfScope > 0) {
     console.log(`note: partial run -- ${result.outOfScope} registry entr(ies) from files outside this run carried forward, not retired`);
   }

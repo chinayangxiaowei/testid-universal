@@ -88,11 +88,24 @@ bound-identifier roots, `v-model` targets); the adapter resolves them to their
 untouched — the diff reports `modified` with `symbol:<name>`, and the linked tests are
 routed to `re-test`.
 
-**Honest boundary:** only *directly referenced* definitions are tracked. Imports resolve
-to their import statement only; symbol→symbol calls (a handler calling a service) are NOT
-followed. Frameworks/adapters without the capability degrade to name-only tracking.
-Registries created before symbol tracking upgrade with zero noise (first run records the
-baseline).
+**One hop further (`dep_defs`, on by default; `tag --no-deps` turns it off).** The
+definitions a referenced handler *directly uses* are hashed too — a same-file helper, an
+imported function (relative paths, tsconfig/jsconfig `paths` aliases, re-export barrels
+followed to the real declaration), a hook or store reached through an instance alias
+(`const tasks = useTaskStore(); tasks.claimTask()` → only the `claimTask` member), and
+Angular injected service methods (`this.svc.create()`). A change there reports
+`modified` with `dep:<handler>><ref>` (e.g. `dep:submit>createOrder`) and routes the
+linked tests to `re-test`. Only the referenced declaration/member is sliced, so editing a
+sibling export does not flag.
+
+**Honest boundary:** tracking stops one hop past the handler — what `createOrder` itself
+calls (layer 3), bare packages (node_modules), and dynamic dispatch are NOT followed. A
+local-looking import that cannot be resolved is printed by `tag` as UNRESOLVED (never
+silently treated as unchanged). Cross-file changes are only seen when the dependent file
+is in the `tag` run (tag the whole source tree, not just changed files). Frameworks /
+adapters without the capability degrade to name-only tracking. Registries created before
+symbol or dep tracking upgrade with zero noise (first run records the baseline; dep keys
+are compared only when present on both sides).
 
 ## Quick start
 

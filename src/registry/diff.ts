@@ -61,6 +61,21 @@ export function diffSignals(a: NormalizedSignals, b: NormalizedSignals): SignalC
   return changes;
 }
 
+/**
+ * Layer-2 deps compare ONLY keys present on both sides. A key appearing/disappearing
+ * means the handler's own text changed (already reported as symbol:<name>) or tracking
+ * was toggled / newly resolvable — neither is a behavior change of a known dependency,
+ * so this keeps upgrades and --no-deps toggles noise-free.
+ */
+function diffDepDefs(a: Record<string, string> | undefined, b: Record<string, string> | undefined): SignalChange[] {
+  if (!a || !b) return [];
+  const changes: SignalChange[] = [];
+  for (const k of Object.keys(b).sort()) {
+    if (k in a && a[k] !== b[k]) changes.push({ field: `dep:${k}`, old: a[k], new: b[k] });
+  }
+  return changes;
+}
+
 function diffSymbolDefs(a: Record<string, string> | undefined, b: Record<string, string> | undefined): SignalChange[] {
   const av = a ?? {}, bv = b ?? {};
   const changes: SignalChange[] = [];
@@ -82,7 +97,10 @@ export function diff(from: RegistrySnapshot, to: RegistrySnapshot): DiffResult {
     if (prev) {
       // A pre-upgrade entry has no symbol_defs baseline; with nothing to compare,
       // emitting changes would be pure migration noise — the first run records the baseline.
-      const symbolChanges = prev.symbol_defs === undefined ? [] : diffSymbolDefs(prev.symbol_defs, entry.symbol_defs);
+      const symbolChanges = [
+        ...(prev.symbol_defs === undefined ? [] : diffSymbolDefs(prev.symbol_defs, entry.symbol_defs)),
+        ...diffDepDefs(prev.dep_defs, entry.dep_defs),
+      ];
       if (prev.fingerprint === entry.fingerprint && symbolChanges.length === 0) unchanged++;
       else modified.push({
         id, identity: entry.identity, component: entry.component,

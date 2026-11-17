@@ -22,6 +22,8 @@ export interface RegistryEntry {
   fingerprint: string;
   disambiguator: string;
   symbol_defs: Record<string, string>;
+  /** Layer-2 dep hashes; absent on legacy entries and when tracking was off. */
+  dep_defs?: Record<string, string>;
   signals: NormalizedSignals;
   /** Source file this element lives in (scopes partial tag runs). Absent on legacy entries. */
   file?: string;

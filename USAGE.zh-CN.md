@@ -101,7 +101,7 @@ npx testid tag src --ext .vue --check      # 需要打标则 exit 1;什么都不
 五段管线(check → 常量+tsc → affected → 选择性执行 → 全量兜底)按
 `docs/superpowers/specs/2026-06-11-ci-integration-design.md` 搭建。两条诚实规则:
 git diff 超出被打标组件文件范围时放弃选择性、升级全量;保留夜间/合并后全量
-(传递性代码变更对注册表不可见,这是设计边界)。
+(handler 之后超过一层的代码变更对注册表不可见,这是设计边界——见 README 的 `dep_defs`)。
 
 ### 1.7 覆盖率驱动循环(经实战验证的方法论)
 
@@ -181,8 +181,8 @@ expect(r.violations.filter((v) => ['serious','critical'].includes(v.impact!))).t
 6. **覆盖率**:`coverage --runtime`(testid)+ 单元 `--coverage`(代码)。两个门都上棘轮
    (`--min` / `coverage.thresholds`);延后的簇要显式记录,绝不静默丢弃。
 7. **`mark-green`**:选择性套件转绿后执行——新的重测锚点。
-8. **CI / 夜间**:跑**全量**(所有 spec、所有视口)。传递性代码改动**按设计**对注册表不可见,
-   全量跑是兜底。
+8. **CI / 夜间**:跑**全量**(所有 spec、所有视口)。handler 之后超过一层的代码改动(第三层及以上、
+   裸包、动态分发)**按设计**对注册表不可见,全量跑是兜底。
 
 **触发矩阵——每种改动"类型"必须跑什么**(✓ = 强制):
 
@@ -212,7 +212,7 @@ expect(r.violations.filter((v) => ['serious','critical'].includes(v.impact!))).t
 
 | 命令 | 参数 | 说明 |
 | --- | --- | --- |
-| `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]`(默认 `.html`)· `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` | adapter 自动选择:`.vue`→Vue;`.jsx`/`.tsx`→React(老式 `.js` JSX 用 `--ext .js --adapter react`);含 Angular 特征(`(event)=`、`*ngIf`……)的 `.html`→Angular;其余→HTML。`--check`:CI 闸门,零写盘,需打标则 exit 1。`--regenerate`:丢弃已写 id,按当前信号重铸 |
+| `tag <paths...>` | `--ext .html\|.vue\|.jsx,.tsx[,…]`(默认 `.html`)· `--adapter html\|vue\|angular\|react` · `--attr NAME` · `--regenerate` · `--dry` · `--check` · `--no-deps` | adapter 自动选择:`.vue`→Vue;`.jsx`/`.tsx`→React(老式 `.js` JSX 用 `--ext .js --adapter react`);含 Angular 特征(`(event)=`、`*ngIf`……)的 `.html`→Angular;其余→HTML。`--check`:CI 闸门,零写盘,需打标则 exit 1。`--regenerate`:丢弃已写 id,按当前信号重铸。`--no-deps`:关闭一层外的 `dep_defs` 追踪(默认开启;会打印已追踪/UNRESOLVED 数量) |
 | `diff <from> <to>` | — | markdown diff 到 stdout(字段级 + `symbol:` 变更) |
 | `gen-locators` | `--target robot\|playwright\|cypress\|webdriverio\|selenium-python\|testcafe`(默认 `robot`)· `--out DIR`(默认 `tests/locators`)· `--attr` | 选择器约定 `[data-testid="<id>"]` |
 | `gen-constants` | `--out FILE` · `--check`(CI 闸:已提交的常量模块缺失或落后于注册表最新版时 exit 1)(默认 stdout) | 常量名冲突时抛错(守住 fail-closed) |
@@ -296,9 +296,19 @@ html_id → structural → child_shape → text → aria_label → placeholder �
 rebase 后重跑 `tag`——sticky 保证 id 本身不变,只是版本号重排。
 
 **符号跟踪没有标记我的变更。**
-覆盖范围:元素直接引用的 Vue `<script setup>` 顶层声明(handler 名、绑定根、`v-model`
-目标)。设计上不覆盖:传递调用(service/util 函数体)、options API / 普通 `<script>`、
-import 符号的实现体(只哈希 import 语句)。这正是周期性全量存在的原因。
+覆盖范围:元素直接引用的定义(`symbol:`——handler 名、绑定根、`v-model` 目标),再加**一层**
+(`dep:`——同文件辅助函数、经相对路径 / tsconfig `paths` / barrel 解析的 import 函数、经实例
+别名访问的 hook 与 store 成员、Angular 注入服务的方法)。依次排查:(1) `tag` 是否打印了
+`dep tracking: OFF`(传了 `--no-deps`)或 UNRESOLVED 的 import——这类 import 的变更无法触发,
+到 tsconfig `paths` 里补上别名;(2) 改的是第三层(service 自己再调用的)、裸包或动态分发——
+设计上不追踪;(3) 依赖方文件不在本次 `tag` 范围内(跨文件变更只有在使用它的页面被重新解析时
+才能看到——对整个源码树打标);(4) options API / 普通 `<script>`(Vue)解析不到任何定义。
+这正是周期性全量存在的原因。
+
+**改一个公共 hook/store,重测了很多用例。**
+符合预期:`dep_defs` 只切被访问的*成员*(`tasks.claimTask`),但直接绑定 store 对象本身的元素
+(`v-model="tasks.query"`,其根是 `tasks`)依赖的是整个 store 定义;而所有用到被改公共辅助函数
+的元素确实都受影响。多报是安全方向;`tag --no-deps` 可退回只追第一层(切换开关零噪音)。
 
 **对 `.vue` 跑 `tag` 报 `@vue/compiler-sfc` 错误。**
 安装可选 peer:`npm i -D @vue/compiler-sfc`。

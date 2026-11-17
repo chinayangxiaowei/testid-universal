@@ -135,6 +135,17 @@ export class AngularAdapter implements FrameworkAdapter {
     return applyTestIdEdits(source, edits);
   }
 
+  /** Layer-2 host script: the companion `<name>.ts` (templateUrl convention). */
+  scriptContext(_source: string, file: string) {
+    const companion = file.replace(/\.html?$/i, '.ts');
+    if (companion === file || !existsSync(companion)) return null;
+    try {
+      return { code: readFileSync(companion, 'utf8'), path: companion };
+    } catch {
+      return null;
+    }
+  }
+
   /** L2 resolver over the companion `<name>.ts` (templateUrl convention). */
   resolveSymbolDefs(names: string[], _source: string, file: string): Record<string, string | null> {
     const result: Record<string, string | null> = {};
