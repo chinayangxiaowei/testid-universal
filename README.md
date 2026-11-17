@@ -1,13 +1,27 @@
-# testid-universal
+# testid-universal: Test Impact Analysis for E2E Tests
 
 [![CI](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml/badge.svg)](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 English | [简体中文](./README.zh-CN.md)
 
-A framework-agnostic, build-time **TestID engine** that makes `data-testid` a reliable
-bridge for automated-test maintenance: after any code change, it tells you — precisely and
-deterministically — **which e2e test cases need to be rebuilt, modified, or removed**.
+**Know which e2e tests to rerun after any code change.** testid-universal is a
+framework-agnostic, build-time engine for **test impact analysis** of end-to-end suites: it
+writes **deterministic `data-testid`** attributes into your Vue, React, Angular or HTML
+templates, binds each test id to the source it depends on, and turns every code change into
+an exact **E2E test selection** — which test cases to rerun, rewrite, or retire.
+
+- **Test impact analysis (TIA) for e2e** — a code change maps to the exact Playwright,
+  Cypress, WebdriverIO or TestCafe test cases that use the affected elements, even when no
+  test id changed: handler bodies and the definitions they directly call are tracked.
+- **E2E test selection in CI** — run only the affected tests on each pull request; the
+  reference CI router falls back to the full suite wherever tracking cannot vouch for the
+  result ([CI tutorial](docs/ci-tutorial.md)).
+- **Deterministic test id generation** — stable `data-testid` values derived from semantics
+  (form control, name, route, handler), never from DOM position or copy; once written they
+  stay sticky across edits, so locators do not churn.
+- **Fail-closed locators** — generated test id constants (TS or plain JS), so a removed
+  element breaks compilation instead of a test run.
 
 ```
 RawSignals (per element) → identity + fingerprint → deterministic id

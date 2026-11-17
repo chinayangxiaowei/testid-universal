@@ -1,12 +1,25 @@
-# testid-universal
+# testid-universal:面向 E2E 测试的测试影响分析(Test Impact Analysis)
 
 [![CI](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml/badge.svg)](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 [English](./README.md) | 简体中文
 
-一个框架无关的**构建期 TestID 引擎**,让 `data-testid` 成为自动化测试维护的可靠桥梁:
-任何代码变更之后,它都能**精确、确定地**告诉你——**哪些 e2e 测试用例需要重建、修改或删除**。
+**任何代码变更之后,都知道该重跑哪些 e2e 测试。** testid-universal 是一个框架无关的构建期引擎,
+为端到端测试套件做**测试影响分析(test impact analysis)**:它把**确定性的 `data-testid`
+(deterministic testid)**写进 Vue、React、Angular 或 HTML 模板,把每个 test id 绑定到它依赖的
+源码,再把每次代码变更转换成精确的 **E2E 测试选择(E2E test selection)**——哪些用例要重跑、
+重写或删除。
+
+- **E2E 测试影响分析(TIA)**——代码变更直接映射到使用了受影响元素的 Playwright、Cypress、
+  WebdriverIO 或 TestCafe 测试用例;即使 test id 没变也能发现:handler 函数体以及它直接调用
+  的定义都在追踪范围内。
+- **CI 中的 E2E 测试选择**——每个 PR 只跑受影响的测试;参考 CI 路由脚本在追踪无法担保的地方
+  回退到全量([CI 教程](docs/ci-tutorial.zh-CN.md))。
+- **确定性 test id 生成**——稳定的 `data-testid` 由语义(表单控件、name、路由、handler)推导,
+  不依赖 DOM 位置或文案;写入后在编辑中保持 sticky,定位器不会漂移。
+- **Fail-closed 定位器**——生成 test id 常量(TS 或纯 JS),元素被删时编译失败,而不是等到
+  测试运行才发现。
 
 ```
 RawSignals(逐元素) → identity + fingerprint → 确定性 id
