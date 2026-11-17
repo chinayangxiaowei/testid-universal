@@ -17,9 +17,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      # The lockfile is written by npm 11; npm 10 (bundled with Node 22) resolves the
-      # optional wasm peer deps (@emnapi/*) differently and rejects it in `npm ci`.
-      - run: npm install -g npm@11
+      # Pin the npm that writes package-lock.json. npm 10 (Node 22) and newer npm 11.x
+      # (>= 11.2x) resolve the optional wasm peer deps (@napi-rs/wasm-runtime ->
+      # @emnapi/core, @emnapi/runtime) differently and reject this lockfile in `npm ci`.
+      # Bump this together with regenerating the lockfile on the same npm version.
+      - run: npm install -g npm@11.6.1
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
