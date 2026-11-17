@@ -11,7 +11,7 @@
  * consumers who never touch Vue keep the package's zero-runtime-dependency profile.
  */
 import { ElementNode, RawSignals } from '../core/types';
-import { FrameworkAdapter, applyTestIdEdits } from './contract';
+import { FrameworkAdapter, applyTestIdEdits, isOwnTestIdAttr, ownAttrRange } from './contract';
 import { Edit } from '../server/service';
 
 // Minimal shapes we read off the @vue/compiler-dom AST (typed loosely on purpose).
@@ -162,12 +162,15 @@ export class VueAdapter implements FrameworkAdapter {
             start + node.tag.length + 1,
           );
           const tagEnd = source.indexOf('>', afterProps);
+          const strip = (node.props ?? [])
+            .filter((p) => p.type === PROP_ATTRIBUTE && isOwnTestIdAttr(p.name ?? '') && p.loc)
+            .map((p) => ownAttrRange(source, p.loc!.start.offset, p.loc!.end.offset));
           nodes.push({
             component,
             tag: node.tag,
             signals: normalize(node),
             existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
-            loc: { file, start, end: tagEnd },
+            loc: { file, start, end: tagEnd, strip },
             inLoop: loop,
           });
         }

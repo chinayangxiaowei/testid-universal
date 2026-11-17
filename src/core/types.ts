@@ -82,6 +82,13 @@ export interface SourceLoc {
   file: string;
   start: number;
   end: number;
+  /**
+   * Exact [start, end) ranges of the tag's OWN existing data-testid / data-cy
+   * attributes (leading whitespace included), from an AST. When present the writer
+   * removes exactly these instead of lexing the tag text (which cannot see comments,
+   * escapes or template substitutions). Absent = lexer fallback (HTML adapter).
+   */
+  strip?: [number, number][];
 }
 
 /**

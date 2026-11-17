@@ -12,7 +12,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { ElementNode, RawSignals } from '../core/types';
-import { FrameworkAdapter, applyTestIdEdits } from './contract';
+import { FrameworkAdapter, applyTestIdEdits, isOwnTestIdAttr, ownAttrRange } from './contract';
 import { Edit } from '../server/service';
 
 type NgNode = any;
@@ -115,7 +115,12 @@ export class AngularAdapter implements FrameworkAdapter {
               tag,
               signals,
               existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
-              loc: { file, start: n.sourceSpan.start.offset, end: n.startSourceSpan.end.offset - 1 },
+              loc: {
+                file, start: n.sourceSpan.start.offset, end: n.startSourceSpan.end.offset - 1,
+                strip: (n.attributes ?? [])
+                  .filter((a: any) => isOwnTestIdAttr(String(a.name)) && a.sourceSpan)
+                  .map((a: any) => ownAttrRange(source, a.sourceSpan.start.offset, a.sourceSpan.end.offset)),
+              },
               inLoop: loop,
             });
           }

@@ -239,6 +239,11 @@ adapter 会根据匹配到的文件自动选择(`.vue` → `VueAdapter`,否则 H
   崩溃写入方遗留,会被回收。多机共享服务请用 `PostgresStorage`(行锁;传入 `pg.Pool` 才有真
   事务)。
 - HTML adapter 是手写的、识别引号的扫描器,不是规范解析器。
+- 写回由带种子的属性测试守护(`test/adapters/write-fuzz.test.ts`):随机合法 JSX——嵌套、prop
+  里的 JSX、三元、展开、满是引号/花括号的注释与字符串、预先存在的 id——写回后必须仍可解析、
+  去掉新增 id 后逐字节还原、单个元素绝不带两个 id、重打是不动点(`FUZZ_N` / `FUZZ_SEED` 可放大
+  或固定一次运行)。React/Vue/Angular adapter 把标签自身已有 testid 的精确 AST 范围交给写回器;
+  只有 HTML 仍靠词法扫描。
 
 ## 开发
 

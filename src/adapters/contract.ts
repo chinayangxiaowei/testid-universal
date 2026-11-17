@@ -97,12 +97,25 @@ export function applyTestIdEdits(source: string, edits: Edit[]): string {
   const render = ({ e, children }: Node): string => {
     // Walk the original tag text; own segments get top-level id stripping, nested
     // edits are rendered recursively in place.
-    // The scanner state (brace depth, quote) carries across holes.
-    const strip = ownTestIdStripper();
+    // AST adapters name the exact own-attribute ranges (loc.strip); otherwise the
+    // lexer runs, its state (brace depth, quote) carried across holes.
+    const own = e.loc.strip ? [...e.loc.strip].sort((a, b) => a[0] - b[0]) : null;
+    const lex = own ? null : ownTestIdStripper();
+    const seg = (from: number, to: number): string => {
+      if (!own) return lex!(source.slice(from, to));
+      let s = '';
+      let c = from;
+      for (const [a, b] of own) {
+        if (b <= from || a >= to) continue;
+        s += source.slice(c, Math.max(a, from));
+        c = Math.min(b, to);
+      }
+      return s + source.slice(c, to);
+    };
     let body = '';
     let cursor = e.loc.start;
     for (const c of children) {
-      body += strip(source.slice(cursor, c.e.loc.start)) + render(c);
+      body += seg(cursor, c.e.loc.start) + render(c);
       cursor = c.e.loc.end + 1;
     }
     // Minimal invasion: the attribute goes right before the tag's original closing
@@ -110,7 +123,7 @@ export function applyTestIdEdits(source: string, edits: Edit[]): string {
     // the self-close form are the author's formatting, not ours to normalize.
     const tail = source.slice(cursor, e.loc.end + 1);
     const closing = /\s*\/?>\s*$/.exec(tail)?.[0] ?? '';
-    const head = strip(tail.slice(0, tail.length - closing.length));
+    const head = seg(cursor, e.loc.end + 1 - closing.length);
     return `${body}${head} ${e.attributeName}="${e.id}"${closing}`;
   };
 
@@ -123,6 +136,19 @@ export function applyTestIdEdits(source: string, edits: Edit[]): string {
   return out + source.slice(cursor);
 }
 
+/** An own-attribute strip range: the attribute plus the whitespace before it. */
+export function ownAttrRange(source: string, start: number, end: number): [number, number] {
+  let s = start;
+  while (s > 0 && /\s/.test(source[s - 1])) s--;
+  return [s, end];
+}
+
+const OWN_TESTID_ATTRS = new Set(['data-testid', 'data-cy']);
+/** Whether an attribute name is one the writer replaces (the tag's own static testid). */
+export function isOwnTestIdAttr(name: string): boolean {
+  return OWN_TESTID_ATTRS.has(name.toLowerCase());
+}
+
 /**
  * Returns a stateful stripper that removes ` data-testid="…"` / ` data-cy="…"` only
  * at a tag's own attribute level: occurrences inside a quoted value or a `{…}`
@@ -131,7 +157,7 @@ export function applyTestIdEdits(source: string, edits: Edit[]): string {
  * left by nested edits.
  */
 function ownTestIdStripper(): (text: string) => string {
-  const attr = /\s+(?:data-testid|data-cy)\s*=\s*"[^"]*"/y;
+  const attr = /\s+(?:data-testid|data-cy)\s*=\s*(?:"[^"]*"|'[^']*')/y;
   let depth = 0;
   let quote: string | null = null;
   return (text) => {

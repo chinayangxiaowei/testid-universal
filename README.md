@@ -258,6 +258,12 @@ from props only and instances share one id), plus **HTML** (regex scanner, demo-
   older than 30s is treated as a crashed writer and reclaimed. For a shared multi-host
   service use `PostgresStorage` (row lock; pass a `pg.Pool` so it gets real transactions).
 - The HTML adapter is a hand-written, quote-aware scanner — not a spec parser.
+- Write-back is guarded by a seeded property test (`test/adapters/write-fuzz.test.ts`):
+  random valid JSX — nesting, JSX in props, ternaries, spreads, comments and strings full
+  of quotes/braces, pre-existing ids — must still parse, restore byte-exactly when the
+  inserted ids are removed, never carry two ids on one element, and re-tag as a fixed
+  point (`FUZZ_N` / `FUZZ_SEED` widen or pin a run). The React/Vue/Angular adapters hand
+  the writer the exact AST ranges of a tag's own existing testid; only HTML lexes.
 
 ## Development
 

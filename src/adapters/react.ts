@@ -16,7 +16,7 @@
  * straight from the parsed source; imports stay the L3 opaque boundary.
  */
 import { ElementNode, RawSignals } from '../core/types';
-import { FrameworkAdapter, applyTestIdEdits } from './contract';
+import { FrameworkAdapter, applyTestIdEdits, isOwnTestIdAttr, ownAttrRange } from './contract';
 import { Edit } from '../server/service';
 
 type BabelNode = any;
@@ -141,6 +141,7 @@ export class ReactAdapter implements FrameworkAdapter {
     const events: Record<string, string> = {};
     const exprs: Record<string, string> = {};
     let boundTestid = false;
+    const strip: [number, number][] = [];
 
     for (const a of open.attributes ?? []) {
       if (a.type !== 'JSXAttribute' || a.name?.type !== 'JSXIdentifier') continue; // spreads stay out of identity
@@ -148,6 +149,7 @@ export class ReactAdapter implements FrameworkAdapter {
       const name = rawName.toLowerCase();
       if (a.value == null || a.value.type === 'StringLiteral') {
         attrs[name] = a.value?.value ?? '';
+        if (isOwnTestIdAttr(name)) strip.push(ownAttrRange(source, a.start, a.end));
         continue;
       }
       if (a.value.type !== 'JSXExpressionContainer') continue;
@@ -202,7 +204,7 @@ export class ReactAdapter implements FrameworkAdapter {
         tag,
         signals,
         existingId: attrs['data-testid'] ?? attrs['data-cy'] ?? null,
-        loc: { file, start: open.start, end: open.end - 1 },
+        loc: { file, start: open.start, end: open.end - 1, strip },
         inLoop,
       });
     }
