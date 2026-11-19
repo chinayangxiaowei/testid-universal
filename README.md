@@ -1,9 +1,10 @@
 # testid-universal: Test Impact Analysis for E2E Tests
 
 [![CI](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml/badge.svg)](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/testid-universal.svg)](https://www.npmjs.com/package/testid-universal)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/chinayangxiaowei/testid-universal/blob/main/LICENSE)
 
-English | [简体中文](./README.zh-CN.md)
+English | [简体中文](https://github.com/chinayangxiaowei/testid-universal/blob/main/README.zh-CN.md)
 
 **Know which e2e tests to rerun after any code change.** testid-universal is a
 framework-agnostic, build-time engine for **test impact analysis** of end-to-end suites: it
@@ -16,7 +17,7 @@ an exact **E2E test selection** — which test cases to rerun, rewrite, or retir
   test id changed: handler bodies and the definitions they directly call are tracked.
 - **E2E test selection in CI** — run only the affected tests on each pull request; the
   reference CI router falls back to the full suite wherever tracking cannot vouch for the
-  result ([CI tutorial](docs/ci-tutorial.md)).
+  result ([CI tutorial](https://github.com/chinayangxiaowei/testid-universal/blob/main/docs/ci-tutorial.md)).
 - **Deterministic test id generation** — stable `data-testid` values derived from semantics
   (form control, name, route, handler), never from DOM position or copy; once written they
   stay sticky across edits, so locators do not churn.
@@ -148,18 +149,31 @@ are compared only when present on both sides).
 
 ## Quick start
 
-> Step-by-step tutorial, full CLI/config/warning references, and FAQ: **[USAGE.md](./USAGE.md)**.
+> Step-by-step tutorial, full CLI/config/warning references, and FAQ: **[USAGE.md](https://github.com/chinayangxiaowei/testid-universal/blob/main/USAGE.md)**.
 
-Not on npm yet: clone and build, then depend on the local checkout.
+### Install from npm
+
+Run this in the project whose templates and tests you want to maintain:
 
 ```bash
-git clone https://github.com/chinayangxiaowei/testid-universal && (cd testid-universal && npm ci && npm run build)
-npm i -D file:../testid-universal   # from your project; zero runtime deps in core
-# optional peer deps, only for what you use:
-npm i -D @vue/compiler-sfc          # Vue adapter
-npm i -D @angular/compiler          # Angular adapter
-npm i -D @babel/parser              # React adapter and one-hop dependency tracking
+npm install -D testid-universal
 ```
+
+The core has zero runtime dependencies. Install optional peer dependencies for the
+framework you use, if they are not already present:
+
+```bash
+npm install -D @vue/compiler-sfc@^3 @babel/parser@^7   # Vue + source-dependency tracking
+npm install -D @babel/parser@^7                       # React + source-dependency tracking
+npm install -D @angular/compiler@^20 @babel/parser@^7  # Angular 20 + source-dependency tracking
+```
+
+For Angular, match `@angular/compiler` to your application's Angular major (17–20);
+the example above uses Angular 20. `@babel/parser` also enables definition-level and
+one-hop dependency tracking for Vue and Angular. Plain HTML tagging needs no peer dependencies.
+CI verifies Node.js 22 and 24.
+
+After installation, run `npx testid` from your project directory to use the CLI.
 
 ### Tag a Vue project (library)
 
@@ -212,25 +226,32 @@ A `modified` id (markup field OR `symbol:<name>` change) routes its tests to `re
 
 ### CLI (embedded)
 
+Run these commands in your project after installing the npm package.
+The `diff` and `affected` examples assume two registry versions; run `tag` again
+after editing your source to create the next version.
+
 ```bash
-npm run cli -- tag src/app --registry ./reg                  # HTML-like templates (default --ext .html)
-npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFCs (VueAdapter picked automatically)
-npm run cli -- tag src --ext .jsx,.tsx --registry ./reg      # React (ReactAdapter picked automatically)
-npm run cli -- tag src --ext .vue --check                    # CI gate: writes nothing, exit 1 if tagging is needed
-npm run cli -- diff 1 2 --registry ./reg
-npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
-npm run cli -- gen-constants --out e2e/testids.generated.ts --registry ./reg
-npm run cli -- affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
-npm run serve            # OPTIONAL node:http backend on :7337; add --server <url> to any command
-                         # (JsonFileStorage = one host; set DATABASE_URL for PostgresStorage)
+npx testid tag src/app --registry ./reg                     # HTML-like templates (default --ext .html)
+npx testid tag src --ext .vue --registry ./reg               # Vue SFCs (VueAdapter picked automatically)
+npx testid tag src --ext .jsx,.tsx --registry ./reg           # React (ReactAdapter picked automatically)
+npx testid tag src --ext .vue --registry ./reg --check        # CI gate: writes nothing, exit 1 if tagging is needed
+npx testid diff 1 2 --registry ./reg
+npx testid gen-locators --target playwright --out tests/locators --registry ./reg
+mkdir -p e2e
+npx testid gen-constants --out e2e/testids.generated.ts --registry ./reg
+npx testid affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
 ```
+
+Commands run locally by default. To use an existing remote backend, append
+`--server <url>` to a command. See [Development](#development) to run the optional
+backend from a repository checkout.
 
 `affected` prints the `write-new` / `retire` / `re-test` report and (with `--out-list`)
 emits the file list for the runner (`--include-limited` adds the beyond-depth fallback
 tests; guard an empty list — `playwright test` with no filter runs everything).
-**Step-by-step CI setup: [`docs/ci-tutorial.md`](docs/ci-tutorial.md)** (copy-ready router
-script + GitHub Actions workflow in `examples/ci/`); design rationale in
-`docs/superpowers/specs/2026-06-11-ci-integration-design.md`.
+**Step-by-step CI setup: [`docs/ci-tutorial.md`](https://github.com/chinayangxiaowei/testid-universal/blob/main/docs/ci-tutorial.md)** (copy-ready router
+script + GitHub Actions workflow in [`examples/ci/`](https://github.com/chinayangxiaowei/testid-universal/tree/main/examples/ci)); design rationale in
+[`docs/superpowers/specs/2026-06-11-ci-integration-design.md`](https://github.com/chinayangxiaowei/testid-universal/blob/main/docs/superpowers/specs/2026-06-11-ci-integration-design.md).
 
 The adapter is picked from the matched files (`.vue` → Vue, `.jsx`/`.tsx` → React, `.html`
 with Angular markers such as `(click)=` / `*ngIf` → Angular, otherwise HTML);
@@ -316,13 +337,26 @@ from props only and instances share one id), plus **HTML** (hand-written quote-a
 
 ## Development
 
+For work on testid-universal itself, clone the repository and install its development
+dependencies. CI uses Node.js 22/24 and npm 11.6.1; use the same npm version for the lockfile.
+
 ```bash
-npm test            # vitest (291 tests)
+git clone https://github.com/chinayangxiaowei/testid-universal.git
+cd testid-universal
+npm ci
+```
+
+```bash
+npm test            # vitest
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 npm run demo        # HTML end-to-end demo
 npm run demo:vue    # .vue → tag → diff → Playwright locators
+npm run serve       # optional node:http backend on :7337
 ```
+
+The optional backend uses `JsonFileStorage` on one host by default. Set `DATABASE_URL`
+and install `pg` to use `PostgresStorage` for a shared multi-host service.
 
 Design docs live in `docs/superpowers/specs/` (identity model; sticky ids + dual-map);
 empirical findings in `docs/findings/`. The project began as a clean-room distillation of

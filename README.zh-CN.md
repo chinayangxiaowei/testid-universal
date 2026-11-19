@@ -1,9 +1,10 @@
 # testid-universal:面向 E2E 测试的测试影响分析(Test Impact Analysis)
 
 [![CI](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml/badge.svg)](https://github.com/chinayangxiaowei/testid-universal/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/testid-universal.svg)](https://www.npmjs.com/package/testid-universal)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/chinayangxiaowei/testid-universal/blob/main/LICENSE)
 
-[English](./README.md) | 简体中文
+[English](https://github.com/chinayangxiaowei/testid-universal/blob/main/README.md) | 简体中文
 
 **任何代码变更之后,都知道该重跑哪些 e2e 测试。** testid-universal 是一个框架无关的构建期引擎,
 为端到端测试套件做**测试影响分析(test impact analysis)**:它把**确定性的 `data-testid`
@@ -15,7 +16,7 @@
   WebdriverIO 或 TestCafe 测试用例;即使 test id 没变也能发现:handler 函数体以及它直接调用
   的定义都在追踪范围内。
 - **CI 中的 E2E 测试选择**——每个 PR 只跑受影响的测试;参考 CI 路由脚本在追踪无法担保的地方
-  回退到全量([CI 教程](docs/ci-tutorial.zh-CN.md))。
+  回退到全量([CI 教程](https://github.com/chinayangxiaowei/testid-universal/blob/main/docs/ci-tutorial.zh-CN.md))。
 - **确定性 test id 生成**——稳定的 `data-testid` 由语义(表单控件、name、路由、handler)推导,
   不依赖 DOM 位置或文案;写入后在编辑中保持 sticky,定位器不会漂移。
 - **Fail-closed 定位器**——生成 test id 常量(TS 或纯 JS),元素被删时编译失败,而不是等到
@@ -131,17 +132,29 @@ symbol / dep 跟踪之前创建的注册表升级时零噪音(首次运行只记
 
 ## 快速上手
 
-> 手把手教程、CLI/配置/警告完整参考与 FAQ:**[USAGE.zh-CN.md](./USAGE.zh-CN.md)**。
+> 手把手教程、CLI/配置/警告完整参考与 FAQ:**[USAGE.zh-CN.md](https://github.com/chinayangxiaowei/testid-universal/blob/main/USAGE.zh-CN.md)**。
+
+### 从 npm 安装
+
+在需要维护模板和测试的项目目录中执行:
 
 ```bash
-# 尚未发布到 npm:先克隆并构建,再以本地路径作为依赖
-git clone https://github.com/chinayangxiaowei/testid-universal && (cd testid-universal && npm ci && npm run build)
-npm i -D file:../testid-universal   # 在你的项目里执行;core 零运行时依赖
-# 可选 peer 依赖,按需安装:
-npm i -D @vue/compiler-sfc          # Vue adapter
-npm i -D @angular/compiler          # Angular adapter
-npm i -D @babel/parser              # React adapter 与一层依赖追踪
+npm install -D testid-universal
 ```
+
+core 零运行时依赖。根据使用的框架安装可选 peer 依赖;项目中已有的依赖无需重复安装:
+
+```bash
+npm install -D @vue/compiler-sfc@^3 @babel/parser@^7   # Vue + source-dependency tracking
+npm install -D @babel/parser@^7                       # React + source-dependency tracking
+npm install -D @angular/compiler@^20 @babel/parser@^7  # Angular 20 + source-dependency tracking
+```
+
+Angular 的 `@angular/compiler` 主版本应与应用一致(支持 17–20);以上以 Angular 20 为例。
+`@babel/parser` 还用于 Vue、Angular 的定义级与一层依赖追踪。纯 HTML 打标无需安装 peer 依赖。
+CI 验证 Node.js 22 和 24。
+
+安装后,在项目目录中通过 `npx testid` 使用 CLI。
 
 ### 给 Vue 项目打标(库方式)
 
@@ -194,24 +207,29 @@ console.log(affectedTestsToMarkdown(affectedTests(diff, map)));
 
 ### CLI(嵌入式)
 
+安装 npm 包后,在你的项目目录中执行。
+`diff` 和 `affected` 示例假设注册表已有两个版本;修改源码后再次运行 `tag` 即可创建下一版。
+
 ```bash
-npm run cli -- tag src/app --registry ./reg                  # HTML 类模板(默认 --ext .html)
-npm run cli -- tag src --ext .vue --registry ./reg           # Vue SFC(自动选用 VueAdapter)
-npm run cli -- tag src --ext .jsx,.tsx --registry ./reg      # React(自动选用 ReactAdapter)
-npm run cli -- tag src --ext .vue --check                    # CI 闸门:不写盘,需要打标则 exit 1
-npm run cli -- diff 1 2 --registry ./reg
-npm run cli -- gen-locators --target playwright --out tests/locators --registry ./reg
-npm run cli -- gen-constants --out e2e/testids.generated.ts --registry ./reg
-npm run cli -- affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
-npm run serve            # 可选:在 :7337 启动 node:http 后端;任意命令加 --server <url> 即切远程
-                         # (JsonFileStorage 仅限单机;设 DATABASE_URL 切 PostgresStorage)
+npx testid tag src/app --registry ./reg                     # HTML-like templates (default --ext .html)
+npx testid tag src --ext .vue --registry ./reg               # Vue SFCs (VueAdapter picked automatically)
+npx testid tag src --ext .jsx,.tsx --registry ./reg           # React (ReactAdapter picked automatically)
+npx testid tag src --ext .vue --registry ./reg --check        # CI gate: writes nothing, exit 1 if tagging is needed
+npx testid diff 1 2 --registry ./reg
+npx testid gen-locators --target playwright --out tests/locators --registry ./reg
+mkdir -p e2e
+npx testid gen-constants --out e2e/testids.generated.ts --registry ./reg
+npx testid affected 1 2 --tests e2e --out-list retest.txt --registry ./reg
 ```
+
+命令默认在本地执行。使用已有远程后端时,在命令后追加 `--server <url>`。
+从源码启动可选后端的方式见[开发](#开发)。
 
 `affected` 打印 `write-new` / `retire` / `re-test` 报告;加 `--out-list` 会产出可直接喂给
 测试运行器的文件清单(`--include-limited` 会加入超深度兜底测试;注意防住空清单——不带过滤参数的
-`playwright test` 会跑全部)。**CI 逐步搭建见 [`docs/ci-tutorial.zh-CN.md`](docs/ci-tutorial.zh-CN.md)**
-(`examples/ci/` 下有可直接复制的路由脚本与 GitHub Actions workflow);设计依据见
-`docs/superpowers/specs/2026-06-11-ci-integration-design.md`。
+`playwright test` 会跑全部)。**CI 逐步搭建见 [`docs/ci-tutorial.zh-CN.md`](https://github.com/chinayangxiaowei/testid-universal/blob/main/docs/ci-tutorial.zh-CN.md)**
+([`examples/ci/`](https://github.com/chinayangxiaowei/testid-universal/tree/main/examples/ci) 下有可直接复制的路由脚本与 GitHub Actions workflow);设计依据见
+[`docs/superpowers/specs/2026-06-11-ci-integration-design.md`](https://github.com/chinayangxiaowei/testid-universal/blob/main/docs/superpowers/specs/2026-06-11-ci-integration-design.md)。
 
 adapter 会根据匹配到的文件自动选择(`.vue` → Vue,`.jsx`/`.tsx` → React,含 `(click)=` /
 `*ngIf` 等 Angular 特征的 `.html` → Angular,其余 → HTML);`--adapter <html|vue|angular|react>` 可覆盖;混合两类文件的运行会被明确报错拒绝。嵌入式与远程可互换:
@@ -288,13 +306,26 @@ adapter 会根据匹配到的文件自动选择(`.vue` → Vue,`.jsx`/`.tsx` →
 
 ## 开发
 
+开发 testid-universal 本身时,先克隆仓库并安装开发依赖。
+CI 使用 Node.js 22/24 和 npm 11.6.1;请使用相同的 npm 版本安装锁文件中的依赖。
+
 ```bash
-npm test            # vitest(291 个测试)
+git clone https://github.com/chinayangxiaowei/testid-universal.git
+cd testid-universal
+npm ci
+```
+
+```bash
+npm test            # vitest
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 npm run demo        # HTML 端到端演示
 npm run demo:vue    # .vue → 打标 → diff → Playwright 定位器
+npm run serve       # optional node:http backend on :7337
 ```
+
+可选后端默认使用单机 `JsonFileStorage`。多机共享服务可设置 `DATABASE_URL`,
+并安装 `pg` 以切换到 `PostgresStorage`。
 
 设计文档在 `docs/superpowers/specs/`(身份模型;sticky id + 双映射);实证发现在
 `docs/findings/`。项目始于对构建期 Angular tagger 思路
