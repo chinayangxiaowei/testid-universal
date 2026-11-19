@@ -1,6 +1,6 @@
 {
   "name": "testid-universal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Know which e2e tests to rerun after any code change: stable data-testid anchors + source-dependency tracking for Vue, React, Angular and HTML.",
   "keywords": [
     "data-testid",
